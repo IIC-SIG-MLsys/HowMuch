@@ -44,20 +44,26 @@ html, body {
   gap: 16px;
   padding-top: 16px;
   padding-bottom: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.brand {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: clamp(19px, 2.3vw, 26px);
   letter-spacing: .5px;
+  overflow-wrap: break-word;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-.subtitle { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.subtitle { margin: 4px 0 0; color: var(--muted); font-size: 14px; overflow-wrap: break-word; }
 
 .header-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
@@ -66,6 +72,7 @@ h1 {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .lang-toggle {
@@ -429,4 +436,9 @@ tr:hover td { background: rgba(109,141,255,.05); }
   .kpi .value { font-size: 20px; }
   h1 { font-size: 21px; }
   .mini-summary { align-items: flex-start; }
+}
+
+@media (max-width: 960px) and (min-width: 721px) {
+  .header-main { flex-direction: column; align-items: stretch; }
+  .header-side { align-items: flex-end; }
 }
