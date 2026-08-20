@@ -87,6 +87,13 @@ window.addEventListener('load', () => {
 
       ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
       ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
+      ok(!!d.getElementById('btn-more'), 'mobile more button exists');
+
+      d.getElementById('btn-more').click();
+      ok(d.querySelector('.header-side').classList.contains('open'), 'mobile more menu opens');
+      ok(d.getElementById('btn-more').getAttribute('aria-expanded') === 'true', 'mobile more aria-expanded true');
+      d.getElementById('btn-more').click();
+      ok(!d.querySelector('.header-side').classList.contains('open'), 'mobile more menu closes');
 
       ok(d.querySelectorAll('#assumptions-wrap table tr').length >= 6, 'assumptions table rendered');
       ok(!d.querySelector('.site-footer').textContent.includes('GitHub Pages'), 'footer sentence removed');

@@ -813,12 +813,21 @@ const App = (() => {
 
     // 事件委托：语言、场景、情景按钮（防止任何重绘覆盖导致点击失效）
     document.addEventListener('click', e => {
+      const sideEl = document.querySelector('.header-side');
+      if (sideEl && !e.target.closest('.header-side')) sideEl.classList.remove('open');
+      if (sideEl && e.target.closest('.header-actions')) sideEl.classList.remove('open');
       const langBtn = e.target.closest('[data-lang]');
       if (langBtn) { I18N.setLang(langBtn.dataset.lang); return; }
       const scenarioBtn = e.target.closest('[data-scenario]');
       if (scenarioBtn) { applyScenario(scenarioBtn.dataset.scenario); return; }
       const relBtn = e.target.closest('[data-reliability]');
       if (relBtn) { applyReliability(relBtn.dataset.reliability); return; }
+    });
+
+    $('btn-more').addEventListener('click', () => {
+      const sideEl = document.querySelector('.header-side');
+      const open = sideEl.classList.toggle('open');
+      $('btn-more').setAttribute('aria-expanded', String(open));
     });
 
     $('btn-export').addEventListener('click', exportConfig);
