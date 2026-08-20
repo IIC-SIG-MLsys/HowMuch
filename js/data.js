@@ -233,6 +233,20 @@ function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+// 深合并：以 base 默认值为底，parsed 覆盖；缺失的新字段保留默认值
+function mergeState(base, parsed) {
+  const out = deepClone(base);
+  for (const key of Object.keys(parsed)) {
+    if (parsed[key] && typeof parsed[key] === 'object' && !Array.isArray(parsed[key]) &&
+        out[key] && typeof out[key] === 'object') {
+      out[key] = { ...out[key], ...parsed[key] };
+    } else {
+      out[key] = parsed[key];
+    }
+  }
+  return out;
+}
+
 // 金额字段从一种币种换算到另一种（rate: 目标币种每 USD 单位，如 CNY=7.2）
 function convertMoney(state, fromCurrency, toCurrency) {
   const fromRate = CURRENCY_RATE[fromCurrency] || 1;
@@ -262,6 +276,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MODEL_PRESETS, GPU_PRESETS, OFFICIAL_PRICING, CURRENCY_RATE,
     defaultState, applyGpuPreset, applyModelPreset, convertMoney,
-    deepClone, round2
+    deepClone, mergeState, round2
   };
 }

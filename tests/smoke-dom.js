@@ -80,6 +80,17 @@ window.addEventListener('load', () => {
 
       change('gpu-nodes', -3);
       ok(parseFloat(d.getElementById('gpu-nodes').value) >= 1, 'node count clamped');
+      change('gpu-nodes', 5.5);
+      ok(parseFloat(d.getElementById('gpu-nodes').value) === 6, 'integer fields rounded');
+
+      change('gpu-key', 'b300');
+      ok(Math.abs(parseFloat(d.getElementById('gpu-rent').value) - 8 * 7.2) < 0.01, 'GPU preset converts rent to CNY');
+      ok(Math.abs(parseFloat(d.getElementById('gpu-purchase').value) - 550000 * 7.2) < 1, 'GPU preset converts purchase to CNY');
+
+      const resetBtn = [...d.querySelectorAll('.header-actions .btn')].find(b => b.textContent === '重置默认');
+      resetBtn.click();
+      ok(d.getElementById('currency-btn').textContent === '¥ CNY', 'reset keeps CNY');
+      ok(Math.abs(parseFloat(d.getElementById('gpu-rent').value) - 3.5 * 7.2) < 0.01, 'reset converts defaults to CNY');
 
       d.getElementById('btn-save-snapshot').click();
       ok(d.querySelector('#snapshot-compare').textContent.includes('当前方案'), 'snapshot saved and compared');

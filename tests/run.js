@@ -6,6 +6,7 @@
 const data = require('../js/data.js');
 
 global.deepClone = data.deepClone;
+global.CURRENCY_RATE = data.CURRENCY_RATE;
 global.applyGpuPreset = data.applyGpuPreset;
 global.applyModelPreset = data.applyModelPreset;
 global.round2 = data.round2;

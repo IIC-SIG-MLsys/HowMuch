@@ -352,9 +352,15 @@ function tornado(state) {
 
 function compareGpus(state) {
   const out = [];
+  const rate = CURRENCY_RATE[state.currency] / CURRENCY_RATE.USD;
   for (const key of ['h100', 'h200', 'b300']) {
     const st = deepClone(state);
     applyGpuPreset(st, key);
+    // 预设金额为 USD，需换算到当前币种，避免 CNY 下混用美元数字
+    st.gpu.rentPerHour = round1(st.gpu.rentPerHour * rate);
+    st.gpu.purchasePrice = round1(st.gpu.purchasePrice * rate);
+    st.gpu.coloPerNodeMonth = round1(st.gpu.coloPerNodeMonth * rate);
+    st.cost.coloPerNodeMonth = st.gpu.coloPerNodeMonth;
     const r = calcResults(st);
     out.push({
       key,
@@ -375,7 +381,7 @@ function compareGpus(state) {
 
 function profitCurve(state) {
   const curve = [];
-  for (let u = 0; u <= 110; u += 5) {
+  for (let u = 0; u <= 100; u += 5) {
     const st = deepClone(state);
     st.biz.utilizationPct = u;
     const r = calcResults(st);

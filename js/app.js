@@ -33,7 +33,7 @@ const ASSUMPTIONS = [
   { key: 'assumption.singleStream', src: 'src.estimate', values: s => ({ low: Math.round(s.opt.singleStreamTps * 0.8), typical: s.opt.singleStreamTps, high: Math.round(s.opt.singleStreamTps * 1.2) }) },
   { key: 'assumption.prefillEff', src: 'src.estimate', values: s => ({ low: '—', typical: s.opt.prefillEffPct + '%', high: '—' }) },
   { key: 'assumption.rent', src: 'src.market', values: s => ({ low: '—', typical: s.gpu.rentPerHour + '/GPU/h', high: '—' }) },
-  { key: 'assumption.kvBytes', src: 'src.official', values: s => ({ low: s.model.kvBytesPerToken, typical: s.model.kvBytesPerToken, high: s.modelKey === 'v4-pro' || s.modelKey === 'v4-pro-fp4' ? '1024（估算）' : '—' }) }
+  { key: 'assumption.kvBytes', src: 'src.official', values: s => ({ low: s.model.kvBytesPerToken, typical: s.model.kvBytesPerToken, high: s.modelKey === 'v4-pro' || s.modelKey === 'v4-pro-fp4' ? I18N.t('assumption.kvBytesHigh') : '—' }) }
 ];
 
 const App = (() => {
@@ -91,18 +91,19 @@ const App = (() => {
     ['sens-util-step', s => s.sensitivity.utilStep, (s, v) => s.sensitivity.utilStep = v, 1, 50],
     ['sens-tornado', s => s.sensitivity.tornadoPct, (s, v) => s.sensitivity.tornadoPct = v, 1, 100]
   ];
+  const integerFields = new Set(['gpu-nodes', 'gpu-per-node', 'biz-private-nodes', 'cost-amort']);
 
   // ---------- 状态 ----------
 
   function loadState() {
     const base = defaultState();
     const hashState = decodeHash();
-    if (hashState) return Object.assign(base, migrateState(hashState));
+    if (hashState) return mergeState(base, migrateState(hashState));
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.model && parsed.gpu) return Object.assign(base, migrateState(parsed));
+        if (parsed && parsed.model && parsed.gpu) return mergeState(base, migrateState(parsed));
       }
     } catch (e) { /* ignore */ }
     return base;
@@ -222,9 +223,10 @@ const App = (() => {
       if (!el) continue;
       const v = parseFloat(el.value);
       if (isNaN(v)) continue;
-      const clamped = clamp(v, min, max);
+      let clamped = clamp(v, min, max);
+      if (integerFields.has(id)) clamped = Math.round(clamped);
       set(state, clamped);
-      el.value = clamped;
+      if (clamped !== v) el.value = clamped;
     }
     state.biz.privateNodes = Math.round(clamp(state.biz.privateNodes, 0, state.nodes));
     $('biz-private-nodes').value = state.biz.privateNodes;
@@ -671,7 +673,7 @@ const App = (() => {
       try {
         const parsed = JSON.parse(reader.result);
         if (!parsed.model || !parsed.gpu || !parsed.biz) throw new Error('bad config');
-        state = Object.assign(defaultState(), migrateState(parsed));
+        state = mergeState(defaultState(), migrateState(parsed));
         populateForm();
         renderAll();
         toast(I18N.t('toast.imported'));
@@ -744,10 +746,12 @@ const App = (() => {
   }
 
   function printReport() {
+    const prevOpen = [...document.querySelectorAll('#panel-setup details')].map(d => d.hasAttribute('open'));
     const after = () => {
       document.body.classList.remove('printing');
       const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'setup';
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + activeTab));
+      document.querySelectorAll('#panel-setup details').forEach((d, i) => d.toggleAttribute('open', prevOpen[i]));
       setTimeout(() => Charts.resizeAll(), 60);
     };
     document.body.classList.add('printing');
@@ -762,6 +766,7 @@ const App = (() => {
   // ---------- 标签页 ----------
 
   function switchTab(name) {
+    document.querySelector('.header-side')?.classList.remove('open');
     document.querySelectorAll('.tab').forEach(b => {
       const active = b.dataset.tab === name;
       b.classList.toggle('active', active);
@@ -817,7 +822,11 @@ const App = (() => {
 
     $('gpu-key').addEventListener('change', e => {
       applyGpuPreset(state, e.target.value);
-      state.cost.coloPerNodeMonth = round2(state.gpu.coloPerNodeMonth * (CURRENCY_RATE[state.currency] / CURRENCY_RATE.USD));
+      const rate = CURRENCY_RATE[state.currency] / CURRENCY_RATE.USD;
+      state.gpu.rentPerHour = round2(state.gpu.rentPerHour * rate);
+      state.gpu.purchasePrice = round2(state.gpu.purchasePrice * rate);
+      state.gpu.coloPerNodeMonth = round2(state.gpu.coloPerNodeMonth * rate);
+      state.cost.coloPerNodeMonth = state.gpu.coloPerNodeMonth;
       populateForm();
       renderAll();
     });
@@ -881,7 +890,9 @@ const App = (() => {
     resetBtn.className = 'btn ghost small';
     resetBtn.textContent = I18N.t('btn.reset');
     resetBtn.addEventListener('click', () => {
+      const cur = state.currency;
       state = defaultState();
+      convertMoney(state, 'USD', cur);
       populateForm();
       renderAll();
       toast(I18N.t('toast.reset'));
