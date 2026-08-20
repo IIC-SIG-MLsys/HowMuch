@@ -1,6 +1,7 @@
 'use strict';
 
 const STORE_KEY = 'howmuch-state-v2';
+const SNAP_KEY = 'howmuch-snapshot-v2';
 
 const SOURCES = [
   { name: 'DeepSeek-V4 发布与规格（V4-Pro 1.6T/49B、V4-Flash 284B/13B、1M 上下文、MIT）', url: 'https://developer.aliyun.com/article/1730877', date: '2026-04-23' },
@@ -69,6 +70,7 @@ const App = (() => {
     ['cost-idle', s => s.cost.idlePowerPct, (s, v) => s.cost.idlePowerPct = v, 0, 100],
     ['cost-amort', s => s.cost.amortMonths, (s, v) => s.cost.amortMonths = v, 1, 120],
     ['cost-maint', s => s.cost.maintPctPerYear, (s, v) => s.cost.maintPctPerYear = v, 0, 50],
+    ['cost-residual', s => s.cost.residualPct, (s, v) => s.cost.residualPct = v, 0, 90],
     ['cost-colo', s => s.cost.coloPerNodeMonth, (s, v) => s.cost.coloPerNodeMonth = v, 0, 1e7],
     ['sens-price-min', s => s.sensitivity.priceMin, (s, v) => s.sensitivity.priceMin = v, 0, 1e6],
     ['sens-price-max', s => s.sensitivity.priceMax, (s, v) => s.sensitivity.priceMax = v, 0.01, 1e6],
@@ -301,7 +303,14 @@ const App = (() => {
     renderCapacity();
     renderProfit();
     renderSensitivity();
+    renderSnapshot();
     updateOfficialHint();
+  }
+
+  let renderTimer = null;
+  function scheduleRender() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderAll, 120);
   }
 
   function kpi(label, value, cls = '', sub = '') {
@@ -337,6 +346,9 @@ const App = (() => {
     if (!state.opt.dsparkOn) warns.push('DSpark 已关闭：官方实测单流提速 60–85%，开启后产能与并发收益会显著提升。');
     if (state.opt.kvPoolOn && state.opt.cacheHitPct < 20) warns.push('缓存命中率设置较低（<20%）：Agent/多轮场景通常可到 60–90%，建议结合实际流量回放修正。');
     if (state.opt.pdSplitOn) warns.push('已启用 PD 分离：解码吞吐按配置增益放大（默认 +15%），该收益依赖调度器与网络，实际以压测为准。');
+    if ((state.modelKey === 'v4-flash-fp4' || state.modelKey === 'v4-pro-fp4') && (state.gpuKey === 'h100' || state.gpuKey === 'h200')) {
+      warns.push('当前模型为 FP4+FP8 混合预设：H100/H200 不支持 FP4 运算，请改用 FP8 预设或 B300 等 Blackwell 级 GPU。');
+    }
     $('capacity-warning').innerHTML = warns.map(w => `<div class="warning-box">${w}</div>`).join('');
 
     $('capacity-kpis').innerHTML =
@@ -362,6 +374,8 @@ const App = (() => {
       ['单节点预填充', fmtNum(n.nodePrefill, 0) + ' tok/s'],
       ['单节点满负载输出 token/h', fmtTok(outTokHPerNode)],
       ['单节点满负载输入 token/h', fmtTok(inTokHPerNode)],
+      ['缓存命中节省预填充', fmtTok(r.prefillSavedTokH) + '/h',
+        state.opt.kvPoolOn ? `命中率 ${state.opt.cacheHitPct}% 下被跳过的输入计算` : 'KV 缓存池未启用'],
       ['显存占用明细', `${fmtNum(n.weightGB, 0)} GB 权重 + ${fmtNum(state.opt.reserveGB, 0)} GB 预留`, `${fmtNum(n.hbmFree, 0)} GB 可用于 KV`],
       ['KV 容量并发（HBM）', fmtNum(n.hbmCap, 0) + ' 路'],
       ['KV 容量并发（卸载池）', fmtNum(n.offloadCap, 0) + ' 路'],
@@ -387,10 +401,11 @@ const App = (() => {
     $('profit-warning').innerHTML = warns.map(w => `<div class="warning-box">${w}</div>`).join('');
 
     const modeLabel = { official: '官方价转售/自用', premium: '溢价转售', private: '私有化部署', hybrid: '混合策略' }[state.biz.mode];
+    const profitLabel = state.biz.mode === 'official' ? '月毛利（自用=节省）' : '月毛利';
     $('profit-kpis').innerHTML =
       kpi('月收入', fmtMoney(r.revenuePerM, true), '', `${modeLabel} · ${r.apiNodes} API + ${r.privateNodes} 私有化节点`) +
       kpi('月成本', fmtMoney(r.cost.total, true), '', `租金/折旧 ${fmtMoney(r.cost.rent + r.cost.amort + r.cost.maint, true)} + 电费 ${fmtMoney(r.cost.power, true)} + 运维 ${fmtMoney(r.cost.ops, true)}`) +
-      kpi('月毛利', fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
+      kpi(profitLabel, fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
         `每小时 ${fmtMoney(r.revenuePerH - r.cost.total / 730, true)}`) +
       kpi('毛利率', r.margin === null ? '—' : fmtNum(r.margin, 1) + '%', r.margin !== null && r.margin >= 0 ? 'good' : 'bad') +
       kpi('盈亏平衡负载率', r.breakEvenUtil === null ? (state.biz.mode === 'private' ? '—' : '不可达') : fmtNum(r.breakEvenUtil, 0) + '%',
@@ -406,13 +421,25 @@ const App = (() => {
         r.paybackMonths !== null && r.paybackMonths <= 36 ? 'good' : 'warn',
         state.cost.rentMode === 'buy' ? '按当前月毛利' : '当前为租用模式');
 
-    const rb = rentBuyCompare(state, state.cost.amortMonths);
+    $('unit-econ').innerHTML = `
+      <table>
+        <thead><tr><th>单位经济指标</th><th>数值</th><th>口径</th></tr></thead>
+        <tbody>
+          <tr><td>输出 token / 月</td><td>${fmtTok(r.outTokM)}</td><td>解码吞吐 × 负载率 × 730h</td></tr>
+          <tr><td>输入 token / 月</td><td>${fmtTok(r.inTokM)}</td><td>输出 × 输入输出比（受预填充上限约束）</td></tr>
+          <tr><td>每百万输出 token 成本</td><td>${r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut)}</td><td>月总成本 ÷ 输出 tokens × 1M</td></tr>
+          <tr><td>每百万输出 token 收入</td><td>${r.revPerMOut === null ? '—' : fmtMoney(r.revPerMOut)}</td><td>月总收入 ÷ 输出 tokens × 1M</td></tr>
+          <tr><td>每百万输出 token 毛利</td><td class="${r.profitPerMOut !== null && r.profitPerMOut >= 0 ? 'num-good' : 'num-bad'}">${r.profitPerMOut === null ? '—' : fmtMoney(r.profitPerMOut)}</td><td>收入 − 成本（按输出摊薄）</td></tr>
+        </tbody>
+      </table>`;
+
+    const rb = rentBuyCompare(state, state.cost.amortMonths, state.cost.residualPct);
     $('rent-buy-wrap').innerHTML = `
       <table>
         <thead><tr><th>方式</th><th>${rb.months} 个月总成本</th><th>月均成本</th><th>说明</th></tr></thead>
         <tbody>
           <tr><td>租用</td><td>${fmtMoney(rb.rentTotal, true)}</td><td>${fmtMoney(rb.rentMonthly, true)}</td><td>含电费与运维，按当前折扣 ${fmtNum(state.gpu.reservedDiscountPct, 0)}% 计算</td></tr>
-          <tr><td>采购</td><td>${fmtMoney(rb.buyTotal, true)}</td><td>${fmtMoney(rb.buyMonthly, true)}</td><td>一次采购 + 维护/电费/运维，不含残值</td></tr>
+          <tr><td>采购</td><td>${fmtMoney(rb.buyTotal, true)}</td><td>${fmtMoney(rb.buyMonthly, true)}</td><td>一次采购 + 维护/电费/运维，期末按 ${fmtNum(state.cost.residualPct, 0)}% 残值回收（${fmtMoney(rb.residualValue, true)}）</td></tr>
         </tbody>
       </table>
       <p class="muted small">${rb.buySaving > 0
@@ -437,6 +464,53 @@ const App = (() => {
         <td>${c.breakEvenUtil === null ? '—' : fmtNum(c.breakEvenUtil, 0) + '%'}</td>
         <td>${c.fits ? '✅' : '❌ 显存不足'}</td>
       </tr>`).join('') + '</tbody></table>';
+  }
+
+  function renderSnapshot() {
+    const wrap = $('snapshot-compare');
+    let snap = null;
+    try {
+      const raw = localStorage.getItem(SNAP_KEY);
+      if (raw) snap = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+    if (!snap || !snap.model || !snap.gpu) {
+      wrap.innerHTML = '<p class="muted small">尚未保存快照。点击“保存当前方案为快照”，即可与之后任意一次询价方案做 A/B 对比。</p>';
+      return;
+    }
+    snap = Object.assign(defaultState(), migrateState(snap));
+    if (snap.currency !== state.currency) convertMoney(snap, snap.currency, state.currency);
+    const cur = calcResults(state);
+    const old = calcResults(snap);
+    const modeLabel = m => ({ official: '官方价转售/自用', premium: '溢价转售', private: '私有化部署', hybrid: '混合策略' }[m]);
+    const be = r => r.breakEvenUtil === null ? (r.apiNodes === 0 ? '—' : '不可达') : fmtNum(r.breakEvenUtil, 0) + '%';
+    const rows = [
+      ['方案', `${state.model.shortName || state.model.name} · ${state.gpu.name} ×${state.nodes}`, `${snap.model.shortName || snap.model.name} · ${snap.gpu.name} ×${snap.nodes}`],
+      ['模式', modeLabel(state.biz.mode), modeLabel(snap.biz.mode)],
+      ['负载率', fmtNum(state.biz.utilizationPct, 0) + '%', fmtNum(snap.biz.utilizationPct, 0) + '%'],
+      ['月收入', fmtMoney(cur.revenuePerM, true), fmtMoney(old.revenuePerM, true)],
+      ['月成本', fmtMoney(cur.cost.total, true), fmtMoney(old.cost.total, true)],
+      ['月毛利', fmtMoney(cur.profitPerM, true), fmtMoney(old.profitPerM, true)],
+      ['毛利率', cur.margin === null ? '—' : fmtNum(cur.margin, 1) + '%', old.margin === null ? '—' : fmtNum(old.margin, 1) + '%'],
+      ['盈亏平衡负载率', be(cur), be(old)],
+      ['输出 token/h', fmtTok(cur.outTokH), fmtTok(old.outTokH)],
+      ['每百万输出成本', cur.costPerMOut === null ? '—' : fmtMoney(cur.costPerMOut), old.costPerMOut === null ? '—' : fmtMoney(old.costPerMOut)]
+    ];
+    wrap.innerHTML =
+      '<table><thead><tr><th>指标</th><th>当前方案</th><th>快照方案</th></tr></thead><tbody>' +
+      rows.map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join('') +
+      '</tbody></table>';
+  }
+
+  function saveSnapshot() {
+    try { localStorage.setItem(SNAP_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    renderSnapshot();
+    toast('已保存当前方案为快照');
+  }
+
+  function clearSnapshot() {
+    try { localStorage.removeItem(SNAP_KEY); } catch (e) { /* ignore */ }
+    renderSnapshot();
+    toast('快照已清除');
   }
 
   function renderSensitivity() {
@@ -464,6 +538,9 @@ const App = (() => {
       '</tr></thead><tbody>' +
       matrix.usages.map((u, i) => `<tr><th>${fmtNum(u, 0)}%</th>${matrix.rows[i].map(cell).join('')}</tr>`).join('') +
       '</tbody></table>';
+    $('heatmap-legend').innerHTML =
+      '<div class="hm-legend"><span>亏损</span><div class="hm-gradient"></div><span>盈利</span>' +
+      `<span class="muted small">单位：${sym}k/月；颜色越深绝对值越大</span></div>`;
 
     Charts.mount('chart-tornado', Charts.tornadoOption(tornadoItems, state.currency, state.sensitivity.tornadoPct));
   }
@@ -473,9 +550,16 @@ const App = (() => {
     const rate = CURRENCY_RATE[state.currency] || 1;
     const f = v => round2(v / 7.2 * rate);
     const p = pricing.offpeak;
+    const officialOut = f(p.out);
+    const compareOut = state.biz.outputPrice > 0
+      ? (state.biz.outputPrice >= officialOut
+        ? `你的输出价 ${fmtMoney(state.biz.outputPrice)} 是官方非高峰价 ${fmtMoney(officialOut)} 的 ${fmtNum(state.biz.outputPrice / officialOut, 1)}×`
+        : `你的输出价 ${fmtMoney(state.biz.outputPrice)} 低于官方非高峰价 ${fmtMoney(officialOut)}，按官方口径倒挂`)
+      : '';
     $('biz-note').textContent =
       `官方参考价（${state.modelKey === 'v4-pro' || state.modelKey === 'v4-pro-fp4' ? 'V4-Pro' : 'V4-Flash'}，2026-08-16 起）：` +
-      `输入 ${fmtMoney(f(p.in))}/M，输出 ${fmtMoney(f(p.out))}/M，缓存命中 ${fmtMoney(f(p.cached))}/M；高峰 = ×${pricing.peakMult}。`;
+      `输入 ${fmtMoney(f(p.in))}/M，输出 ${fmtMoney(officialOut)}/M，缓存命中 ${fmtMoney(f(p.cached))}/M；高峰 = ×${pricing.peakMult}。` +
+      (compareOut ? ` ${compareOut}。` : '');
   }
 
   function renderSources() {
@@ -531,6 +615,35 @@ const App = (() => {
     ta.select();
     try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动复制地址栏链接', true); }
     document.body.removeChild(ta);
+  }
+
+  function copyText(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function copySummary() {
+    const r = calcResults(state);
+    const modeLabel = { official: '官方价转售/自用', premium: '溢价转售', private: '私有化部署', hybrid: '混合策略' }[state.biz.mode];
+    const be = r.breakEvenUtil === null
+      ? (state.biz.mode === 'private' ? '—' : '不可达')
+      : (r.breakEvenUtil > 100 ? '>100%（不可达）' : fmtNum(r.breakEvenUtil, 0) + '%');
+    const lines = [
+      '# AI 部署成本测算摘要',
+      '',
+      `- 方案：${state.model.shortName || state.model.name} · ${state.gpu.name} ×${state.nodes} 节点（${state.gpusPerNode} 卡/节点） · ${modeLabel}`,
+      `- 月收入：${fmtMoney(r.revenuePerM, true)}｜月成本：${fmtMoney(r.cost.total, true)}｜月毛利：${fmtMoney(r.profitPerM, true)}（${r.margin === null ? '—' : fmtNum(r.margin, 1) + '%'}）`,
+      `- 盈亏平衡负载率：${be}`,
+      `- 每百万输出 token 成本：${r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut)}｜输出价：${fmtMoney(state.biz.outputPrice)}/M`,
+      `- 输出 token：${fmtTok(r.outTokM)}/月｜输入：${fmtTok(r.inTokM)}/月｜可计费：${fmtTok(r.billableTokM)}/月`,
+      `- 关键参数：负载率 ${fmtNum(state.biz.utilizationPct, 0)}%、缓存命中 ${state.opt.kvPoolOn ? state.opt.cacheHitPct : 0}%、DSpark ×${state.opt.dsparkOn ? state.opt.dsparkSpeedup : 1}、带宽利用率 ${state.opt.bwUtilPct}%`,
+      `- 生成时间：${new Date().toLocaleString('zh-CN')}`,
+      `- 页面链接：${location.href.split('#')[0]}`
+    ].join('\n');
+    copyText(lines, () => toast('方案摘要已复制，可直接粘贴到聊天/文档'));
   }
 
   let toastTimer = null;
@@ -593,6 +706,7 @@ const App = (() => {
       const from = state.currency;
       const to = e.target.value;
       if (from !== to) {
+        collectForm();
         convertMoney(state, from, to);
         populateForm();
         renderAll();
@@ -625,7 +739,7 @@ const App = (() => {
     });
 
     document.querySelectorAll('#panel-setup input, #panel-setup select').forEach(el => {
-      el.addEventListener('input', renderAll);
+      el.addEventListener('input', scheduleRender);
       el.addEventListener('change', renderAll);
     });
 
@@ -641,6 +755,9 @@ const App = (() => {
     });
     $('btn-share').addEventListener('click', shareLink);
     $('btn-print').addEventListener('click', printReport);
+    $('btn-copy').addEventListener('click', copySummary);
+    $('btn-save-snapshot').addEventListener('click', saveSnapshot);
+    $('btn-clear-snapshot').addEventListener('click', clearSnapshot);
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn ghost';

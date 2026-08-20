@@ -198,6 +198,7 @@ function defaultState() {
       idlePowerPct: 20,
       amortMonths: 36,
       maintPctPerYear: 3,
+      residualPct: 20,
       coloPerNodeMonth: gpu.coloPerNodeMonth
     },
     sensitivity: {

@@ -46,6 +46,8 @@ window.addEventListener('load', () => {
       ok(d.querySelector('#mini-summary').textContent.includes('月毛利'), 'mini summary rendered');
       ok(d.querySelectorAll('#heatmap-wrap table tr').length >= 3, 'heatmap table rendered');
       ok(d.querySelector('#rent-buy-wrap').textContent.includes('采购'), 'rent-buy compare rendered');
+      ok(d.querySelector('#unit-econ').textContent.includes('每百万输出 token 成本'), 'unit economics rendered');
+      ok(d.querySelector('#heatmap-legend').textContent.includes('盈利'), 'heatmap legend rendered');
       ok(d.querySelector('#biz-note').textContent.includes('官方参考价'), 'official hint rendered');
       ok(d.querySelectorAll('#capacity-kpis .kpi').length >= 6, 'capacity KPIs rendered');
       ok(d.querySelector('#source-list').children.length >= 10, 'sources rendered');
@@ -74,8 +76,16 @@ window.addEventListener('load', () => {
       change('model-key', 'v4-pro-fp4');
       ok(d.getElementById('model-total-params').value === '1600', 'model preset applies params');
 
-      input('gpu-nodes', -3);
+      change('gpu-nodes', -3);
       ok(parseFloat(d.getElementById('gpu-nodes').value) >= 1, 'node count clamped');
+
+      d.getElementById('btn-save-snapshot').click();
+      ok(d.querySelector('#snapshot-compare').textContent.includes('当前方案'), 'snapshot saved and compared');
+      d.getElementById('btn-clear-snapshot').click();
+      ok(d.querySelector('#snapshot-compare').textContent.includes('尚未保存快照'), 'snapshot cleared');
+
+      ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
+      ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
 
       ok(errors.length === 0, 'no uncaught errors: ' + errors.join(' | '));
       console.log('\nDOM smoke test passed.');

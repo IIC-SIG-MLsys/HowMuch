@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="AI 部署成本与收益计算器：估算租用/购买 GPU 集群部署生产级大模型的吞吐、成本和盈利空间。">
+  <meta property="og:title" content="AI 部署成本计算器 · HowMuch">
+  <meta property="og:description" content="交互式估算 GPU 集群部署 DeepSeek V4 等大模型的吞吐、成本与盈利空间，支持 DSpark / KV 缓存池 / PD 分离等优化。">
   <title>AI 部署成本计算器 · HowMuch</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
@@ -20,6 +22,7 @@
           <option value="USD">USD $</option>
           <option value="CNY">CNY ¥</option>
         </select>
+        <button id="btn-copy" class="btn ghost">复制摘要</button>
         <button id="btn-share" class="btn ghost">分享链接</button>
         <button id="btn-print" class="btn ghost">打印报告</button>
         <button id="btn-export" class="btn ghost">导出配置</button>
@@ -292,6 +295,10 @@
                 <span>年维护费率（%）</span>
                 <input type="number" id="cost-maint" min="0" step="0.1">
               </label>
+              <label class="field">
+                <span>期末残值率（%）</span>
+                <input type="number" id="cost-residual" min="0" max="90" step="1">
+              </label>
               <label class="field money">
                 <span>机房/运维（/节点/月）</span>
                 <input type="number" id="cost-colo" min="0" step="10">
@@ -336,6 +343,18 @@
       <div id="profit-warning"></div>
       <div class="kpi-grid" id="profit-kpis"></div>
       <div class="card">
+        <h2>单位经济</h2>
+        <div id="unit-econ" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>方案快照对比（A/B）</h2>
+        <div class="snapshot-actions">
+          <button id="btn-save-snapshot" class="btn small">保存当前方案为快照</button>
+          <button id="btn-clear-snapshot" class="btn small ghost">清除快照</button>
+        </div>
+        <div id="snapshot-compare" class="table-wrap"></div>
+      </div>
+      <div class="card">
         <h2>租 vs 买（总成本对比）</h2>
         <div id="rent-buy-wrap" class="table-wrap"></div>
       </div>
@@ -361,6 +380,7 @@
       <div class="card">
         <h2 id="heatmap-title">负载率 × 输出价格：月度毛利热力图（币种/千）</h2>
         <div id="heatmap-wrap" class="table-wrap"></div>
+        <div id="heatmap-legend"></div>
       </div>
       <div class="card">
         <h2>关键参数 ±20% 对月度毛利的影响（Tornado）</h2>

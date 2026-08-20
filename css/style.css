@@ -310,6 +310,15 @@ tr:hover td { background: rgba(109,141,255,.05); }
 #heatmap-wrap table td { min-width: 72px; }
 #heatmap-wrap th:first-child { min-width: 110px; }
 
+.snapshot-actions { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.hm-legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.hm-gradient {
+  width: 140px;
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(248,113,113,.9), rgba(248,113,113,.25) 45%, rgba(52,211,153,.25) 55%, rgba(52,211,153,.9));
+}
+
 .toast {
   position: fixed;
   left: 50%;

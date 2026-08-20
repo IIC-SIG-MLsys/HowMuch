@@ -40,6 +40,7 @@ assert.ok(Number.isFinite(r.revenuePerM) && Number.isFinite(r.cost.total) && Num
 assert.ok(r.outTokM > 0 && r.inTokM > 0, 'token volumes invalid');
 assert.ok(r.breakEvenUtil === null || (r.breakEvenUtil >= 0 && r.breakEvenUtil <= 110), 'breakEvenUtil out of range');
 assert.ok(Number.isFinite(r.billableTokH) && Number.isFinite(r.maxRevPerHPerApiNode));
+assert.ok(Number.isFinite(r.profitPerMOut) && Number.isFinite(r.prefillSavedTokH));
 
 // 6) 私有化模式：收入与负载率无关，合同盈亏平衡价为正
 const stPriv = data.deepClone(st);
@@ -71,6 +72,8 @@ assert.ok(cmp.every(c => Number.isFinite(c.profitPerM) && Number.isFinite(c.prof
 const rb = engine.rentBuyCompare(st, 36);
 assert.strictEqual(rb.months, 36);
 assert.ok(Number.isFinite(rb.rentTotal) && Number.isFinite(rb.buyTotal) && Number.isFinite(rb.buySaving));
+assert.ok(Math.abs(rb.residualValue - st.nodes * st.gpu.purchasePrice * st.cost.residualPct / 100) < 1e-6, 'residual value wrong');
+assert.ok(Math.abs(rb.buyTotal + rb.residualValue - (st.nodes * st.gpu.purchasePrice + rb.buyMonthly * 36)) < 3, 'buy total formula wrong');
 
 // 10) 状态清洗
 const bad = data.deepClone(st);

@@ -58,6 +58,7 @@ function normalizeState(state) {
   s.cost.idlePowerPct = clamp(s.cost.idlePowerPct, 0, 100);
   s.cost.amortMonths = Math.round(clamp(s.cost.amortMonths, 1, 120));
   s.cost.maintPctPerYear = clamp(s.cost.maintPctPerYear, 0, 50);
+  s.cost.residualPct = clamp(s.cost.residualPct, 0, 90);
   s.cost.coloPerNodeMonth = clamp(s.cost.coloPerNodeMonth, 0, 1e7);
 
   s.sensitivity.priceMin = clamp(s.sensitivity.priceMin, 0, 1e6);
@@ -239,6 +240,12 @@ function calcResults(state) {
 
   const costPerMOut = outTokM > 0 ? cost.total / outTokM : null;
   const revPerMOut = outTokM > 0 ? revenuePerM / outTokM : null;
+  const profitPerMOut = outTokM > 0 ? profitPerM / outTokM : null;
+
+  // KV 缓存命中节省的预填充算力（每小时）
+  const prefillSavedTokH = state.opt.kvPoolOn
+    ? Math.min(needInTokH, inCapH) * state.opt.cacheHitPct / 100
+    : 0;
 
   return {
     node: n,
@@ -262,6 +269,8 @@ function calcResults(state) {
     paybackMonths,
     costPerMOut,
     revPerMOut,
+    profitPerMOut,
+    prefillSavedTokH,
     currency: state.currency
   };
 }
@@ -375,8 +384,8 @@ function profitCurve(state) {
   return curve;
 }
 
-// 租 vs 买：months 个月总成本对比（均含电费与运维）
-function rentBuyCompare(state, months = 36) {
+// 租 vs 买：months 个月总成本对比（均含电费与运维；采购计入期末残值回收）
+function rentBuyCompare(state, months = 36, residualPct) {
   const g = state.gpu, c = state.cost;
   const U = state.biz.utilizationPct / 100;
   const nodes = state.nodes;
@@ -390,13 +399,15 @@ function rentBuyCompare(state, months = 36) {
   const maintMonthly = nodes * g.purchasePrice * c.maintPctPerYear / 100 / 12;
   const buyMonthly = maintMonthly + power + ops;
   const rentTotal = rentMonthly * months;
-  const buyTotal = nodes * g.purchasePrice + buyMonthly * months;
+  const residualValue = nodes * g.purchasePrice * (residualPct === undefined ? c.residualPct : residualPct) / 100;
+  const buyTotal = nodes * g.purchasePrice + buyMonthly * months - residualValue;
   return {
     months,
     rentTotal: round1(rentTotal),
     buyTotal: round1(buyTotal),
     rentMonthly: round1(rentMonthly),
     buyMonthly: round1(buyMonthly),
+    residualValue: round1(residualValue),
     buySaving: round1(rentTotal - buyTotal) // >0 表示买更省
   };
 }
