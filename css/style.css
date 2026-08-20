@@ -134,7 +134,7 @@ h1 {
   gap: 6px;
   overflow-x: auto;
   padding-top: 4px;
-  padding-bottom: 12px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -157,7 +157,7 @@ h1 {
   border-color: rgba(109,141,255,.5);
 }
 
-main { padding: 44px 0 48px; }
+main { padding: 64px 0 48px; }
 
 .tab-panel { display: none; animation: fade .25s ease; }
 .tab-panel.active { display: block; }
