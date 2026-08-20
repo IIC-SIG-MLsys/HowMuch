@@ -201,6 +201,7 @@ function defaultState() {
     },
     cost: {
       rentMode: 'rent',
+      rentIncludesPower: true,
       elecPerKWh: 0.10,
       pue: 1.4,
       idlePowerPct: 20,

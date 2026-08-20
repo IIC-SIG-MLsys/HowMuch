@@ -200,6 +200,7 @@ const App = (() => {
     $('gpu-key').value = state.gpuKey;
     $('biz-mode').value = state.biz.mode;
     $('cost-rent-mode').value = state.cost.rentMode;
+    $('cost-rent-incl').checked = state.cost.rentIncludesPower !== false;
     $('opt-dspark').checked = state.opt.dsparkOn;
     $('opt-kvpool').checked = state.opt.kvPoolOn;
     $('opt-offload').checked = state.opt.offloadOn;
@@ -215,6 +216,7 @@ const App = (() => {
     updateMoneyLabels();
     updateScenarioChips();
     updateModeDesc();
+    updateConditionalFields();
   }
 
   function updateCurrencyBtn() {
@@ -227,6 +229,7 @@ const App = (() => {
     state.gpuKey = $('gpu-key').value;
     state.biz.mode = $('biz-mode').value;
     state.cost.rentMode = $('cost-rent-mode').value;
+    state.cost.rentIncludesPower = $('cost-rent-incl').checked;
     state.opt.dsparkOn = $('opt-dspark').checked;
     state.opt.kvPoolOn = $('opt-kvpool').checked;
     state.opt.offloadOn = $('opt-offload').checked;
@@ -278,6 +281,33 @@ const App = (() => {
   function updateModeDesc() {
     const el = $('biz-mode-desc');
     if (el) el.textContent = I18N.t('modeDesc.' + state.biz.mode);
+  }
+
+  function setFieldVisible(selector, visible) {
+    document.querySelectorAll(selector).forEach(el => {
+      if (visible) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    });
+  }
+
+  // 不同选项显示对应的配置栏：租用/采购、商业模式、自定义 GPU
+  function updateConditionalFields() {
+    const isBuy = state.cost.rentMode === 'buy';
+    const rentIncl = state.cost.rentIncludesPower !== false;
+    const bizMode = state.biz.mode;
+    const isApiMode = bizMode !== 'private';
+    const isContractMode = bizMode === 'private' || bizMode === 'hybrid';
+    const isGpuCustom = state.gpuKey === 'custom';
+
+    setFieldVisible('#cost-rent-incl-wrap', !isBuy);
+    setFieldVisible('[data-buy-only]', isBuy);
+    setFieldVisible('[data-power-ops]', isBuy || !rentIncl);
+    setFieldVisible('[data-biz-api]', isApiMode);
+    setFieldVisible('[data-biz-contract]', isContractMode);
+    setFieldVisible('[data-gpu-custom]', isGpuCustom);
+
+    const note = $('rent-mode-note');
+    if (note) note.textContent = I18N.t(isBuy ? 'rentMode.buyNote' : 'rentMode.rentNote');
   }
 
   // ---------- 场景与预设 ----------
@@ -359,6 +389,7 @@ const App = (() => {
 
   function renderAll() {
     collectForm();
+    updateConditionalFields();
     saveState();
     renderMiniSummary();
     updateMobileCta();
@@ -482,14 +513,24 @@ const App = (() => {
 
     const modeLabel = I18N.t('modeLabel.' + state.biz.mode);
     const profitLabel = state.biz.mode === 'official' ? I18N.t('kpi.profitOfficial') : I18N.t('kpi.profit');
+    const costSub = state.cost.rentMode === 'buy'
+      ? I18N.t('kpi.costSubBuy', {
+        a: fmtMoney(r.cost.amort, true),
+        m: fmtMoney(r.cost.maint, true),
+        p: fmtMoney(r.cost.power, true),
+        o: fmtMoney(r.cost.ops, true)
+      })
+      : state.cost.rentIncludesPower
+        ? I18N.t('kpi.costSubRent', { r: fmtMoney(r.cost.rent, true) })
+        : I18N.t('kpi.costSubRentExt', {
+          r: fmtMoney(r.cost.rent, true),
+          p: fmtMoney(r.cost.power, true),
+          o: fmtMoney(r.cost.ops, true)
+        });
     $('profit-kpis').innerHTML =
       kpiGroup(I18N.t('kpiGroup.core'),
         kpi(I18N.t('kpi.revenue'), fmtMoney(r.revenuePerM, true), '', I18N.t('kpi.revenueSub', { mode: modeLabel, a: r.apiNodes, p: r.privateNodes })) +
-        kpi(I18N.t('kpi.cost'), fmtMoney(r.cost.total, true), '', I18N.t('kpi.costSub', {
-          r: fmtMoney(r.cost.rent + r.cost.amort + r.cost.maint, true),
-          p: fmtMoney(r.cost.power, true),
-          o: fmtMoney(r.cost.ops, true)
-        })) +
+        kpi(I18N.t('kpi.cost'), fmtMoney(r.cost.total, true), '', costSub) +
         kpi(profitLabel, fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
           I18N.t('kpi.profitSub', { v: fmtMoney(r.revenuePerH - r.cost.total / 730, true) })) +
         kpi(I18N.t('kpi.margin'), r.margin === null ? '—' : fmtNum(r.margin, 1) + '%', r.margin !== null && r.margin >= 0 ? 'good' : 'bad')) +
@@ -520,11 +561,12 @@ const App = (() => {
       </table>`;
 
     const rb = rentBuyCompare(state, state.cost.amortMonths, state.cost.residualPct);
+    const rentNoteKey = state.cost.rentIncludesPower !== false ? 'rb.rentNoteIncl' : 'rb.rentNoteExt';
     $('rent-buy-wrap').innerHTML = `
       <table>
         <thead><tr><th></th><th>${I18N.t('rb.monthsTotal', { m: rb.months })}</th><th>${I18N.t('rb.monthly')}</th><th>${I18N.t('rb.note')}</th></tr></thead>
         <tbody>
-          <tr><td>${I18N.t('rb.rent')}</td><td>${fmtMoney(rb.rentTotal, true)}</td><td>${fmtMoney(rb.rentMonthly, true)}</td><td>${I18N.t('rb.rentNote', { d: fmtNum(state.gpu.reservedDiscountPct, 0) })}</td></tr>
+          <tr><td>${I18N.t('rb.rent')}</td><td>${fmtMoney(rb.rentTotal, true)}</td><td>${fmtMoney(rb.rentMonthly, true)}</td><td>${I18N.t(rentNoteKey, { d: fmtNum(state.gpu.reservedDiscountPct, 0) })}</td></tr>
           <tr><td>${I18N.t('rb.buy')}</td><td>${fmtMoney(rb.buyTotal, true)}</td><td>${fmtMoney(rb.buyMonthly, true)}</td><td>${I18N.t('rb.buyNote', { r: fmtNum(state.cost.residualPct, 0), v: fmtMoney(rb.residualValue, true) })}</td></tr>
         </tbody>
       </table>

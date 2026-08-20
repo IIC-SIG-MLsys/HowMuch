@@ -79,8 +79,30 @@ assert.ok(cmp.every(c => Number.isFinite(c.profitPerM) && Number.isFinite(c.prof
 const rb = engine.rentBuyCompare(st, 36);
 assert.strictEqual(rb.months, 36);
 assert.ok(Number.isFinite(rb.rentTotal) && Number.isFinite(rb.buyTotal) && Number.isFinite(rb.buySaving));
+const rentOnly = st.nodes * st.gpusPerNode * st.gpu.rentPerHour * 730 * (1 - st.gpu.reservedDiscountPct / 100);
+assert.ok(Math.abs(rb.rentMonthly - rentOnly) < 1e-6, 'all-in rent compare should not add power/colo on top of rent');
 assert.ok(Math.abs(rb.residualValue - st.nodes * st.gpu.purchasePrice * st.cost.residualPct / 100) < 1e-6, 'residual value wrong');
 assert.ok(Math.abs(rb.buyTotal + rb.residualValue - (st.nodes * st.gpu.purchasePrice + rb.buyMonthly * 36)) < 3, 'buy total formula wrong');
+
+// 9b) 租用默认一口价：不再重复计列电费与机房
+assert.strictEqual(r.cost.power, 0, 'all-in rent mode should not bill power');
+assert.strictEqual(r.cost.ops, 0, 'all-in rent mode should not bill colo/ops');
+assert.ok(Math.abs(r.cost.total - r.cost.rent) < 1e-6, 'all-in rent total equals rent');
+
+const stRentExcl = data.deepClone(st); stRentExcl.cost.rentIncludesPower = false;
+const rRentExcl = engine.calcResults(stRentExcl);
+assert.ok(rRentExcl.cost.power > 0 && rRentExcl.cost.ops > 0, 'bare-metal rent mode adds power/colo');
+
+// 9c) Tornado 与获取方式联动
+const tRent = engine.tornado(st);
+assert.ok(!tRent.some(i => i.label === '电价' || i.label === '机房/运维'), 'all-in rent tornado excludes power/colo');
+assert.ok(tRent.some(i => i.label === '单卡时租'), 'all-in rent tornado keeps rent');
+const tRentExcl = engine.tornado(stRentExcl);
+assert.ok(tRentExcl.some(i => i.label === '电价'), 'bare-metal rent tornado includes power');
+const stBuyLocal = data.deepClone(st); stBuyLocal.cost.rentMode = 'buy';
+const tBuy = engine.tornado(stBuyLocal);
+assert.ok(tBuy.some(i => i.label === '电价'), 'buy tornado includes power');
+assert.ok(!tBuy.some(i => i.label === '单卡时租'), 'buy tornado excludes rent');
 
 // 10) 状态清洗
 const bad = data.deepClone(st);
@@ -113,6 +135,7 @@ const stBuy = data.deepClone(st); stBuy.cost.rentMode = 'buy';
 const rBuy = engine.calcResults(stBuy);
 assert.strictEqual(rBuy.cost.rent, 0);
 assert.ok(rBuy.cost.amort > 0, 'buy mode amortizes');
+assert.ok(rBuy.cost.power > 0 && rBuy.cost.ops > 0, 'buy mode bills power and colo');
 
 // 12) 换卡对比在 CNY 下金额一致（不再混用 USD 数字）
 const stCny = data.deepClone(st);

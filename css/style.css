@@ -283,6 +283,7 @@ details summary .muted { font-weight: 400; margin-left: 8px; }
 }
 
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
+.field[hidden] { display: none; }
 .field.full { grid-column: 1 / -1; }
 .field.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); padding-top: 6px; }
 

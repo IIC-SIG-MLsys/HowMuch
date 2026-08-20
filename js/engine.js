@@ -66,6 +66,7 @@ function normalizeState(state) {
   s.biz.contractPerNodeMonth = clamp(s.biz.contractPerNodeMonth, 0, 1e9);
 
   s.cost.elecPerKWh = clamp(s.cost.elecPerKWh, 0, 100);
+  s.cost.rentIncludesPower = s.cost.rentIncludesPower !== false;
   s.cost.pue = clamp(s.cost.pue, 1, 5);
   s.cost.idlePowerPct = clamp(s.cost.idlePowerPct, 0, 100);
   s.cost.amortMonths = Math.round(clamp(s.cost.amortMonths, 1, 120));
@@ -175,14 +176,16 @@ function calcCosts(state, U) {
     rent = gpuH * g.rentPerHour * hours * (1 - g.reservedDiscountPct / 100);
   }
 
-  const powerPerGpuAtFull = g.tdpW / 1000 * hours * c.elecPerKWh * c.pue;
+  // 电费与机房仅计列于：采购自持，或租用但租金未含电费/机房（裸机托管场景）
+  const countPower = c.rentMode === 'buy' || !c.rentIncludesPower;
+  const powerPerGpuAtFull = countPower ? g.tdpW / 1000 * hours * c.elecPerKWh * c.pue : 0;
   const powerIdle = powerPerGpuAtFull * gpuH * c.idlePowerPct / 100;
   const powerVariable = powerPerGpuAtFull * gpuH * (1 - c.idlePowerPct / 100) * U;
   const power = powerIdle + powerVariable;
-  const ops = nodes * c.coloPerNodeMonth;
+  const ops = countPower ? nodes * c.coloPerNodeMonth : 0;
   const total = rent + amort + maint + power + ops;
 
-  const varCostPerUnitU = powerPerGpuAtFull * gpuH * (1 - c.idlePowerPct / 100);
+  const varCostPerUnitU = countPower ? powerPerGpuAtFull * gpuH * (1 - c.idlePowerPct / 100) : 0;
   return {
     rent, amort, maint, power, ops, total,
     powerIdle, powerVariable,
@@ -350,12 +353,18 @@ function tornado(state) {
       ['带宽利用率', s => { s.opt.bwUtilPct = Math.min(99, s.opt.bwUtilPct * (1 + pct)); }, s => { s.opt.bwUtilPct = Math.max(1, s.opt.bwUtilPct * (1 - pct)); }]
     );
   }
-  defs.push(
-    ['单卡时租', s => { s.gpu.rentPerHour *= 1 + pct; }, s => { s.gpu.rentPerHour *= 1 - pct; }],
-    ['预留折扣', s => { s.gpu.reservedDiscountPct = Math.min(90, s.gpu.reservedDiscountPct + pct * 100); }, s => { s.gpu.reservedDiscountPct = Math.max(0, s.gpu.reservedDiscountPct - pct * 100); }],
-    ['电价', s => { s.cost.elecPerKWh *= 1 + pct; }, s => { s.cost.elecPerKWh *= 1 - pct; }],
-    ['机房/运维', s => { s.cost.coloPerNodeMonth *= 1 + pct; }, s => { s.cost.coloPerNodeMonth *= 1 - pct; }]
-  );
+  if (state.cost.rentMode !== 'buy') {
+    defs.push(
+      ['单卡时租', s => { s.gpu.rentPerHour *= 1 + pct; }, s => { s.gpu.rentPerHour *= 1 - pct; }],
+      ['预留折扣', s => { s.gpu.reservedDiscountPct = Math.min(90, s.gpu.reservedDiscountPct + pct * 100); }, s => { s.gpu.reservedDiscountPct = Math.max(0, s.gpu.reservedDiscountPct - pct * 100); }]
+    );
+  }
+  if (state.cost.rentMode === 'buy' || !state.cost.rentIncludesPower) {
+    defs.push(
+      ['电价', s => { s.cost.elecPerKWh *= 1 + pct; }, s => { s.cost.elecPerKWh *= 1 - pct; }],
+      ['机房/运维', s => { s.cost.coloPerNodeMonth *= 1 + pct; }, s => { s.cost.coloPerNodeMonth *= 1 - pct; }]
+    );
+  }
   if (isPrivate || isHybrid) {
     defs.push(
       ['私有化合同', s => { s.biz.contractPerNodeMonth *= 1 + pct; }, s => { s.biz.contractPerNodeMonth *= 1 - pct; }]
@@ -415,7 +424,8 @@ function profitCurve(state) {
   return curve;
 }
 
-// 租 vs 买：months 个月总成本对比（均含电费与运维；采购计入期末残值回收）
+// 租 vs 买：months 个月总成本对比。
+// 租用默认一口价（云 GPU 已含电费/机房）；采购自持计折旧+维护+电费+机房，期末按残值回收。
 function rentBuyCompare(state, months = 36, residualPct) {
   const g = state.gpu, c = state.cost;
   const U = state.biz.utilizationPct / 100;
@@ -426,7 +436,9 @@ function rentBuyCompare(state, months = 36, residualPct) {
   const powerIdle = powerPerGpuAtFull * gpuH * c.idlePowerPct / 100;
   const power = powerIdle + powerPerGpuAtFull * gpuH * (1 - c.idlePowerPct / 100) * U;
   const ops = nodes * c.coloPerNodeMonth;
-  const rentMonthly = gpuH * g.rentPerHour * hours * (1 - g.reservedDiscountPct / 100) + power + ops;
+  const rentPowerIncl = c.rentIncludesPower !== false;
+  const rentMonthly = gpuH * g.rentPerHour * hours * (1 - g.reservedDiscountPct / 100)
+    + (rentPowerIncl ? 0 : power + ops);
   const maintMonthly = nodes * g.purchasePrice * c.maintPctPerYear / 100 / 12;
   const buyMonthly = maintMonthly + power + ops;
   const rentTotal = rentMonthly * months;

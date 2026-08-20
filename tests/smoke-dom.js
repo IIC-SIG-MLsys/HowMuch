@@ -100,6 +100,33 @@ window.addEventListener('load', () => {
       d.getElementById('btn-clear-snapshot').click();
       ok(d.querySelector('#snapshot-compare').textContent.includes('尚未保存快照'), 'snapshot cleared');
 
+      // 获取方式联动：租用默认隐藏电费/机房/折旧字段，采购自持才显示
+      ok(d.getElementById('cost-elec').closest('.field').hasAttribute('hidden'), 'rent mode hides electricity field');
+      ok(d.getElementById('cost-amort').closest('.field').hasAttribute('hidden'), 'rent mode hides amortization field');
+      ok(!d.getElementById('cost-rent-incl').closest('.field').hasAttribute('hidden'), 'rent mode shows all-in checkbox');
+      ok(d.getElementById('rent-mode-note').textContent.includes('云 GPU 租用'), 'rent mode note rendered');
+      change('cost-rent-mode', 'buy');
+      ok(!d.getElementById('cost-elec').closest('.field').hasAttribute('hidden'), 'buy mode shows electricity field');
+      ok(!d.getElementById('cost-amort').closest('.field').hasAttribute('hidden'), 'buy mode shows amortization field');
+      ok(d.getElementById('cost-rent-incl').closest('.field').hasAttribute('hidden'), 'buy mode hides all-in checkbox');
+      ok(d.getElementById('rent-mode-note').textContent.includes('采购自持'), 'buy mode note rendered');
+      change('cost-rent-mode', 'rent');
+      ok(d.getElementById('cost-elec').closest('.field').hasAttribute('hidden'), 'back to rent hides electricity again');
+
+      // 商业模式联动：溢价模式显示 API 定价、隐藏合同；私有化相反
+      ok(!d.getElementById('biz-out-price').closest('.field').hasAttribute('hidden'), 'premium mode shows API pricing');
+      ok(d.getElementById('biz-contract').closest('.field').hasAttribute('hidden'), 'premium mode hides contract fields');
+      d.querySelector('[data-scenario="private"]').click();
+      ok(d.getElementById('biz-out-price').closest('.field').hasAttribute('hidden'), 'private mode hides API pricing');
+      ok(!d.getElementById('biz-contract').closest('.field').hasAttribute('hidden'), 'private mode shows contract fields');
+      d.querySelector('[data-scenario="premium"]').click();
+
+      // 自定义 GPU 才显示手动规格字段
+      ok(d.getElementById('gpu-hbm').closest('.field').hasAttribute('hidden'), 'preset GPU hides manual specs');
+      change('gpu-key', 'custom');
+      ok(!d.getElementById('gpu-hbm').closest('.field').hasAttribute('hidden'), 'custom GPU shows manual specs');
+      change('gpu-key', 'h200');
+
       ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
       ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
       ok(!!d.getElementById('btn-more'), 'mobile more button exists');

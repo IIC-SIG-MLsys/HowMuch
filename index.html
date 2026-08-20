@@ -7,7 +7,7 @@
   <meta property="og:title" content="AI 部署成本计算器 · HowMuch">
   <meta property="og:description" content="交互式估算 GPU 集群部署 DeepSeek V4 等大模型的吞吐、成本与盈利空间，支持 DSpark / KV 缓存池 / PD 分离等优化。">
   <title>AI 部署成本计算器 · HowMuch</title>
-  <link rel="stylesheet" href="css/style.css?v=20260820h">
+  <link rel="stylesheet" href="css/style.css?v=20260820i">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
@@ -106,10 +106,10 @@
               </label>
               <label class="field"><span data-i18n="field.nodes">节点数</span><input type="number" id="gpu-nodes" min="1" max="128" step="1"></label>
               <label class="field"><span data-i18n="field.gpusPerNode">每节点 GPU 数</span><input type="number" id="gpu-per-node" min="1" max="16" step="1"></label>
-              <label class="field"><span data-i18n="field.hbm">单卡显存（GB）</span><input type="number" id="gpu-hbm" min="1" step="1"></label>
-              <label class="field"><span data-i18n="field.bw">显存带宽（TB/s）</span><input type="number" id="gpu-bw" min="0.01" step="0.05"></label>
-              <label class="field"><span data-i18n="field.fp8">FP8 稠密算力（TFLOPS）</span><input type="number" id="gpu-fp8" min="1" step="10"></label>
-              <label class="field"><span data-i18n="field.tdp">TDP（W）</span><input type="number" id="gpu-tdp" min="1" step="10"></label>
+              <label class="field" data-gpu-custom><span data-i18n="field.hbm">单卡显存（GB）</span><input type="number" id="gpu-hbm" min="1" step="1"></label>
+              <label class="field" data-gpu-custom><span data-i18n="field.bw">显存带宽（TB/s）</span><input type="number" id="gpu-bw" min="0.01" step="0.05"></label>
+              <label class="field" data-gpu-custom><span data-i18n="field.fp8">FP8 稠密算力（TFLOPS）</span><input type="number" id="gpu-fp8" min="1" step="10"></label>
+              <label class="field" data-gpu-custom><span data-i18n="field.tdp">TDP（W）</span><input type="number" id="gpu-tdp" min="1" step="10"></label>
               <label class="field money"><span data-i18n="field.rent">按需租金（/卡/时）</span><input type="number" id="gpu-rent" min="0" step="0.01"></label>
               <label class="field"><span data-i18n="field.discount">预留/长租折扣（%）</span><input type="number" id="gpu-discount" min="0" max="90" step="1"></label>
               <label class="field money"><span data-i18n="field.purchase">整机采购价（8 卡）</span><input type="number" id="gpu-purchase" min="0" step="1000"></label>
@@ -177,13 +177,13 @@
               </label>
               <p class="field-note full" id="biz-mode-desc"></p>
               <label class="field"><span data-i18n="field.util">负载率（%）</span><input type="number" id="biz-util" min="0" max="100" step="1"></label>
-              <label class="field"><span data-i18n="field.peakShare">高峰流量占比（%）</span><input type="number" id="biz-peak-share" min="0" max="100" step="1"></label>
-              <label class="field"><span data-i18n="field.peakMult">高峰价格倍率</span><input type="number" id="biz-peak-mult" min="1" max="10" step="0.1"></label>
-              <label class="field money"><span data-i18n="field.outPrice">输出价格（/百万 token）</span><input type="number" id="biz-out-price" min="0" step="0.01"></label>
-              <label class="field money"><span data-i18n="field.inPrice">输入价格-未命中（/百万）</span><input type="number" id="biz-in-price" min="0" step="0.01"></label>
-              <label class="field money"><span data-i18n="field.cachedPrice">输入价格-缓存命中（/百万）</span><input type="number" id="biz-cached-price" min="0" step="0.001"></label>
-              <label class="field"><span data-i18n="field.privateNodes">私有化节点数</span><input type="number" id="biz-private-nodes" min="0" max="128" step="1"></label>
-              <label class="field money"><span data-i18n="field.contract">私有化合同价（/节点/月）</span><input type="number" id="biz-contract" min="0" step="100"></label>
+              <label class="field" data-biz-api><span data-i18n="field.peakShare">高峰流量占比（%）</span><input type="number" id="biz-peak-share" min="0" max="100" step="1"></label>
+              <label class="field" data-biz-api><span data-i18n="field.peakMult">高峰价格倍率</span><input type="number" id="biz-peak-mult" min="1" max="10" step="0.1"></label>
+              <label class="field money" data-biz-api><span data-i18n="field.outPrice">输出价格（/百万 token）</span><input type="number" id="biz-out-price" min="0" step="0.01"></label>
+              <label class="field money" data-biz-api><span data-i18n="field.inPrice">输入价格-未命中（/百万）</span><input type="number" id="biz-in-price" min="0" step="0.01"></label>
+              <label class="field money" data-biz-api><span data-i18n="field.cachedPrice">输入价格-缓存命中（/百万）</span><input type="number" id="biz-cached-price" min="0" step="0.001"></label>
+              <label class="field" data-biz-contract><span data-i18n="field.privateNodes">私有化节点数</span><input type="number" id="biz-private-nodes" min="0" max="128" step="1"></label>
+              <label class="field money" data-biz-contract><span data-i18n="field.contract">私有化合同价（/节点/月）</span><input type="number" id="biz-contract" min="0" step="100"></label>
               <p class="field-note full" id="biz-note"></p>
             </div>
           </details>
@@ -200,13 +200,15 @@
                   <option value="buy" data-i18n="rentMode.buy">采购（折旧摊销）</option>
                 </select>
               </label>
-              <label class="field money"><span data-i18n="field.elec">电价（/kWh）</span><input type="number" id="cost-elec" min="0" step="0.01"></label>
-              <label class="field"><span data-i18n="field.pue">PUE（含制冷损耗）</span><input type="number" id="cost-pue" min="1" max="5" step="0.05"></label>
-              <label class="field"><span data-i18n="field.idle">空闲功耗占比（%）</span><input type="number" id="cost-idle" min="0" max="100" step="1"></label>
-              <label class="field"><span data-i18n="field.amort">采购折旧月数</span><input type="number" id="cost-amort" min="1" max="120" step="1"></label>
-              <label class="field"><span data-i18n="field.maint">年维护费率（%）</span><input type="number" id="cost-maint" min="0" max="50" step="0.1"></label>
-              <label class="field"><span data-i18n="field.residual">期末残值率（%）</span><input type="number" id="cost-residual" min="0" max="90" step="1"></label>
-              <label class="field money"><span data-i18n="field.colo">机房/运维（/节点/月）</span><input type="number" id="cost-colo" min="0" step="10"></label>
+              <p class="field-note full" id="rent-mode-note"></p>
+              <label class="field check" id="cost-rent-incl-wrap"><input type="checkbox" id="cost-rent-incl" checked> <span data-i18n="field.rentIncl">租金已含电费与机房（云租用默认）</span></label>
+              <label class="field money" data-power-ops><span data-i18n="field.elec">电价（/kWh）</span><input type="number" id="cost-elec" min="0" step="0.01"></label>
+              <label class="field" data-power-ops><span data-i18n="field.pue">PUE（含制冷损耗）</span><input type="number" id="cost-pue" min="1" max="5" step="0.05"></label>
+              <label class="field" data-power-ops><span data-i18n="field.idle">空闲功耗占比（%）</span><input type="number" id="cost-idle" min="0" max="100" step="1"></label>
+              <label class="field" data-buy-only><span data-i18n="field.amort">采购折旧月数</span><input type="number" id="cost-amort" min="1" max="120" step="1"></label>
+              <label class="field" data-buy-only><span data-i18n="field.maint">年维护费率（%）</span><input type="number" id="cost-maint" min="0" max="50" step="0.1"></label>
+              <label class="field" data-buy-only><span data-i18n="field.residual">期末残值率（%）</span><input type="number" id="cost-residual" min="0" max="90" step="1"></label>
+              <label class="field money" data-power-ops><span data-i18n="field.colo">机房/运维（/节点/月）</span><input type="number" id="cost-colo" min="0" step="10"></label>
             </div>
           </details>
         </div>
@@ -337,11 +339,11 @@
     <button id="mobile-cta-btn" class="btn small" data-i18n="btn.gotoProfit">查看收益 →</button>
   </div>
 
-  <script src="vendor/echarts.min.js?v=20260820h"></script>
-  <script src="js/i18n.js?v=20260820h"></script>
-  <script src="js/data.js?v=20260820h"></script>
-  <script src="js/engine.js?v=20260820h"></script>
-  <script src="js/charts.js?v=20260820h"></script>
-  <script src="js/app.js?v=20260820h"></script>
+  <script src="vendor/echarts.min.js?v=20260820i"></script>
+  <script src="js/i18n.js?v=20260820i"></script>
+  <script src="js/data.js?v=20260820i"></script>
+  <script src="js/engine.js?v=20260820i"></script>
+  <script src="js/charts.js?v=20260820i"></script>
+  <script src="js/app.js?v=20260820i"></script>
 </body>
 </html>
