@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI 部署成本与收益计算器：估算租用/购买 GPU 集群部署生产级大模型的吞吐、成本和盈利空间。">
+  <title>AI 部署成本计算器 · HowMuch</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div>
+        <h1>AI 部署成本计算器</h1>
+        <p class="subtitle">租 / 买服务器部署生产级大模型：吞吐、成本与盈利空间的交互式测算</p>
+      </div>
+      <div class="header-actions">
+        <select id="currency-select" title="币种" aria-label="币种">
+          <option value="USD">USD $</option>
+          <option value="CNY">CNY ¥</option>
+        </select>
+        <button id="btn-export" class="btn ghost">导出配置</button>
+        <button id="btn-import" class="btn ghost">导入配置</button>
+        <input type="file" id="import-file" accept="application/json" hidden>
+      </div>
+    </div>
+    <nav class="tabbar container">
+      <button class="tab active" data-tab="setup">① 参数设置</button>
+      <button class="tab" data-tab="capacity">② 单机产能</button>
+      <button class="tab" data-tab="profit">③ 收益测算</button>
+      <button class="tab" data-tab="sensitivity">④ 敏感性分析</button>
+      <button class="tab" data-tab="method">⑤ 方法与来源</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- ============ 参数设置 ============ -->
+    <section class="tab-panel active" id="panel-setup">
+      <div class="scenario-bar">
+        <span>快捷场景：</span>
+        <button class="chip" data-scenario="official">官方价转售</button>
+        <button class="chip" data-scenario="premium">溢价转售</button>
+        <button class="chip" data-scenario="private">私有化部署</button>
+        <button class="chip" data-scenario="hybrid">混合策略</button>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <details open>
+            <summary>模型 <span class="muted">DeepSeek V4 系列 / 自定义</span></summary>
+            <div class="form-grid">
+              <label class="field full">
+                <span>模型预设</span>
+                <select id="model-key">
+                  <option value="v4-flash">DeepSeek-V4-Flash（284B / 13B 激活）</option>
+                  <option value="v4-pro">DeepSeek-V4-Pro（1.6T / 49B 激活）</option>
+                  <option value="custom">自定义模型</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>总参数量（B）</span>
+                <input type="number" id="model-total-params" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>激活参数量（B）</span>
+                <input type="number" id="model-active-params" min="0.1" step="0.1">
+              </label>
+              <label class="field">
+                <span>权重字节 / 参数</span>
+                <input type="number" id="model-bytes-per-param" min="0.25" step="0.25">
+              </label>
+              <label class="field">
+                <span>KV 缓存字节 / token</span>
+                <input type="number" id="model-kv-bytes" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>上下文长度（token）</span>
+                <input type="number" id="model-context-len" min="1024" step="1024">
+              </label>
+              <label class="field">
+                <span>平均输入长度（token）</span>
+                <input type="number" id="model-avg-input" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>平均输出长度（token）</span>
+                <input type="number" id="model-avg-output" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>输入 : 输出 比例</span>
+                <input type="number" id="model-ratio" min="0.1" step="0.1">
+              </label>
+              <label class="field">
+                <span>运行时显存开销（%）</span>
+                <input type="number" id="model-overhead" min="0" max="100" step="1">
+              </label>
+              <p class="field-note full">V4-Flash：FP8 权重约 284GB、MLA KV 缓存约 584B/token（vLLM 实测布局）。V4-Pro 的 KV 值请以实测为准。</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <details open>
+            <summary>硬件与租金 <span class="muted">H100 / H200 / B300 / 自定义</span></summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>GPU 预设</span>
+                <select id="gpu-key">
+                  <option value="h100">H100 SXM5 80GB</option>
+                  <option value="h200">H200 SXM 141GB</option>
+                  <option value="b300">B300 SXM 288GB</option>
+                  <option value="custom">自定义 GPU</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>节点数</span>
+                <input type="number" id="gpu-nodes" min="1" max="64" step="1">
+              </label>
+              <label class="field">
+                <span>每节点 GPU 数</span>
+                <input type="number" id="gpu-per-node" min="1" max="16" step="1">
+              </label>
+              <label class="field">
+                <span>单卡显存（GB）</span>
+                <input type="number" id="gpu-hbm" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>显存带宽（TB/s）</span>
+                <input type="number" id="gpu-bw" min="0.1" step="0.05">
+              </label>
+              <label class="field">
+                <span>FP8 稠密算力（TFLOPS）</span>
+                <input type="number" id="gpu-fp8" min="1" step="10">
+              </label>
+              <label class="field">
+                <span>TDP（W）</span>
+                <input type="number" id="gpu-tdp" min="1" step="10">
+              </label>
+              <label class="field money">
+                <span>按需租金（/卡/时）</span>
+                <input type="number" id="gpu-rent" min="0" step="0.01">
+              </label>
+              <label class="field">
+                <span>预留/长租折扣（%）</span>
+                <input type="number" id="gpu-discount" min="0" max="80" step="1">
+              </label>
+              <label class="field money">
+                <span>整机采购价（8 卡）</span>
+                <input type="number" id="gpu-purchase" min="0" step="1000">
+              </label>
+              <label class="field">
+                <span>无 DSpark 单流速度（tok/s）</span>
+                <input type="number" id="opt-single-stream" min="1" step="1">
+              </label>
+              <p class="field-note full">租金默认取 2026 年市场中枢（H100 ≈ $2.5、H200 ≈ $3.5、B300 ≈ $8 /卡/时），询价后请替换为实际报价。</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <details open>
+            <summary>推理优化 <span class="muted">DSpark 推测解码 · Mooncake / LMCache KV 池</span></summary>
+            <div class="form-grid">
+              <label class="field check">
+                <input type="checkbox" id="opt-dspark"> <span>启用 DSpark 推测解码</span>
+              </label>
+              <label class="field">
+                <span>DSpark 吞吐倍率</span>
+                <input type="number" id="opt-dspark-speedup" min="1" max="2.5" step="0.05">
+              </label>
+              <label class="field check">
+                <input type="checkbox" id="opt-kvpool"> <span>启用 KV 缓存池（Mooncake / LMCache）</span>
+              </label>
+              <label class="field">
+                <span>前缀缓存命中率（%）</span>
+                <input type="number" id="opt-hit" min="0" max="99" step="1">
+              </label>
+              <label class="field check">
+                <input type="checkbox" id="opt-offload"> <span>KV 分层卸载（CPU DRAM / NVMe）</span>
+              </label>
+              <label class="field">
+                <span>单节点卸载池容量（GB）</span>
+                <input type="number" id="opt-hostkv" min="0" step="16">
+              </label>
+              <label class="field">
+                <span>解码带宽利用率（%）</span>
+                <input type="number" id="opt-bwutil" min="5" max="95" step="1">
+              </label>
+              <label class="field">
+                <span>预填充效率（%）</span>
+                <input type="number" id="opt-prefill-eff" min="1" max="100" step="1">
+              </label>
+              <label class="field">
+                <span>显存预留（GB/节点）</span>
+                <input type="number" id="opt-reserve" min="0" step="1">
+              </label>
+              <p class="field-note full">DSpark 官方实测：单用户提速 60–85%，严格延迟约束下吞吐最高 +661%。默认取 1.6× 作为生产保守值。</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <details open>
+            <summary>商业模式与定价 <span class="muted">官方转售 / 溢价 / 私有化 / 混合</span></summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>模式</span>
+                <select id="biz-mode">
+                  <option value="official">官方价转售（或自用替代 API）</option>
+                  <option value="premium">溢价转售</option>
+                  <option value="private">私有化 / 合同部署</option>
+                  <option value="hybrid">混合（私有化保底 + API 试水）</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>负载率（%）</span>
+                <input type="number" id="biz-util" min="0" max="100" step="1">
+              </label>
+              <label class="field">
+                <span>高峰流量占比（%）</span>
+                <input type="number" id="biz-peak-share" min="0" max="100" step="1">
+              </label>
+              <label class="field">
+                <span>高峰价格倍率</span>
+                <input type="number" id="biz-peak-mult" min="1" max="5" step="0.1">
+              </label>
+              <label class="field money">
+                <span>输出价格（/百万 token）</span>
+                <input type="number" id="biz-out-price" min="0" step="0.01">
+              </label>
+              <label class="field money">
+                <span>输入价格-未命中（/百万）</span>
+                <input type="number" id="biz-in-price" min="0" step="0.01">
+              </label>
+              <label class="field money">
+                <span>输入价格-缓存命中（/百万）</span>
+                <input type="number" id="biz-cached-price" min="0" step="0.001">
+              </label>
+              <label class="field">
+                <span>私有化节点数</span>
+                <input type="number" id="biz-private-nodes" min="0" max="64" step="1">
+              </label>
+              <label class="field money">
+                <span>私有化合同价（/节点/月）</span>
+                <input type="number" id="biz-contract" min="0" step="100">
+              </label>
+              <p class="field-note full">官方价已内置 2026-08-16 峰谷分时方案；选择“官方价转售”后自动填充，并可通过高峰占比模拟时段结构。</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <details open>
+            <summary>成本结构 <span class="muted">租金/采购 · 电费 · 机房运维</span></summary>
+            <div class="form-grid">
+              <label class="field">
+                <span>获取方式</span>
+                <select id="cost-rent-mode">
+                  <option value="rent">租用（按 GPU 时租）</option>
+                  <option value="buy">采购（折旧摊销）</option>
+                </select>
+              </label>
+              <label class="field money">
+                <span>电价（/kWh）</span>
+                <input type="number" id="cost-elec" min="0" step="0.01">
+              </label>
+              <label class="field">
+                <span>PUE（含制冷损耗）</span>
+                <input type="number" id="cost-pue" min="1" step="0.05">
+              </label>
+              <label class="field">
+                <span>空闲功耗占比（%）</span>
+                <input type="number" id="cost-idle" min="0" max="100" step="1">
+              </label>
+              <label class="field">
+                <span>采购折旧月数</span>
+                <input type="number" id="cost-amort" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>年维护费率（%）</span>
+                <input type="number" id="cost-maint" min="0" step="0.1">
+              </label>
+              <label class="field money">
+                <span>机房/运维（/节点/月）</span>
+                <input type="number" id="cost-colo" min="0" step="10">
+              </label>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <details>
+            <summary>敏感性分析范围 <span class="muted">热力图与 Tornado</span></summary>
+            <div class="form-grid">
+              <label class="field"><span>价格下限</span><input type="number" id="sens-price-min" min="0" step="0.1"></label>
+              <label class="field"><span>价格上限</span><input type="number" id="sens-price-max" min="0.1" step="0.1"></label>
+              <label class="field"><span>价格步长</span><input type="number" id="sens-price-step" min="0.05" step="0.05"></label>
+              <label class="field"><span>负载率下限（%）</span><input type="number" id="sens-util-min" min="0" max="100" step="5"></label>
+              <label class="field"><span>负载率上限（%）</span><input type="number" id="sens-util-max" min="5" max="100" step="5"></label>
+              <label class="field"><span>负载率步长（%）</span><input type="number" id="sens-util-step" min="5" max="25" step="5"></label>
+              <label class="field"><span>Tornado 浮动（%）</span><input type="number" id="sens-tornado" min="5" max="50" step="5"></label>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 单机产能 ============ -->
+    <section class="tab-panel" id="panel-capacity">
+      <div id="capacity-warning"></div>
+      <div class="kpi-grid" id="capacity-kpis"></div>
+      <div class="card">
+        <h2>产能明细（单节点）</h2>
+        <div id="capacity-detail" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>吞吐结构</h2>
+        <div id="chart-throughput" class="chart"></div>
+      </div>
+    </section>
+
+    <!-- ============ 收益测算 ============ -->
+    <section class="tab-panel" id="panel-profit">
+      <div id="profit-warning"></div>
+      <div class="kpi-grid" id="profit-kpis"></div>
+      <div class="card-grid two">
+        <div class="card">
+          <h2>月度成本结构</h2>
+          <div id="chart-cost" class="chart"></div>
+        </div>
+        <div class="card">
+          <h2>负载率 vs 月度收益</h2>
+          <div id="chart-profit-curve" class="chart"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>同配置换卡对比（H100 / H200 / B300）</h2>
+        <div id="gpu-compare" class="table-wrap"></div>
+        <p class="muted small">对比使用相同模型、优化与负载假设；租金/采购价取各卡默认市场价。</p>
+      </div>
+    </section>
+
+    <!-- ============ 敏感性分析 ============ -->
+    <section class="tab-panel" id="panel-sensitivity">
+      <div class="card">
+        <h2 id="heatmap-title">负载率 × 输出价格：月度毛利热力图（币种/千）</h2>
+        <div id="heatmap-wrap" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>关键参数 ±20% 对月度毛利的影响（Tornado）</h2>
+        <div id="chart-tornado" class="chart tall"></div>
+      </div>
+    </section>
+
+    <!-- ============ 方法与来源 ============ -->
+    <section class="tab-panel" id="panel-method">
+      <div class="card">
+        <h2>计算模型</h2>
+        <div class="formula-list">
+          <p><b>权重占用</b> = 总参数量 × 字节/参数 × (1 + 运行时开销%)</p>
+          <p><b>单卡解码吞吐</b> = 显存带宽 ÷ (激活权重字节 + KV 读取字节) × 带宽利用率 × DSpark 倍率</p>
+          <p><b>单节点预填充吞吐</b> = FP8 算力 ÷ (2 × 激活参数量) × GPU 数 × 预填充效率</p>
+          <p><b>输出 token/时</b> = 解码吞吐 × 3600 × 负载率 × API 节点数</p>
+          <p><b>输入 token/时</b> = 输出 × 输入输出比（受预填充能力上限约束）</p>
+          <p><b>API 收入</b> = 输出×输出价 + 输入×(命中率×缓存价 + (1−命中率)×输入价)</p>
+          <p><b>月度成本</b> = 租金(或折旧+维护) + 电费 + 机房运维；电费随负载率线性变化</p>
+          <p><b>盈亏平衡负载率</b> = (固定成本 − 私有化固定收入) ÷ (每单位负载率收入 − 每单位负载率电费)</p>
+        </div>
+        <p class="muted small">关键简化：解码按带宽受限建模，未建模注意力 O(n²) 计算、跨卡通信、调度损耗与排队延迟；实际生产值请以压测为准。</p>
+      </div>
+      <div class="card">
+        <h2>关键假设与来源</h2>
+        <ul class="source-list" id="source-list"></ul>
+      </div>
+      <div class="card warn">
+        <h2>免责声明</h2>
+        <p>本工具输出为理论估算，仅用于方案比选与询价前的数量级判断，不构成投资或采购建议。GPU 价格、模型规格与 API 定价变化很快，务必以签约前的最新报价和实测压测数据为准。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <span>AI 部署成本计算器 · 数据截至 2026-08-20 · 静态页面，可直接部署到 GitHub Pages</span>
+    </div>
+  </footer>
+
+  <script src="vendor/echarts.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/engine-fix.js"></script>
+  <script src="js/ui-fix.js"></script>
+  <script src="js/final-fix.js"></script>
+</body>
+</html>
