@@ -1,0 +1,89 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { JSDOM } = require('jsdom');
+
+const htmlPath = path.join(__dirname, '..', 'index.html');
+let html = fs.readFileSync(htmlPath, 'utf8');
+// 冒烟测试去掉 ECharts（jsdom 无 canvas），验证应用逻辑本身
+html = html.replace('<script src="vendor/echarts.min.js"></script>', '');
+
+const errors = [];
+const dom = new JSDOM(html, {
+  runScripts: 'dangerously',
+  resources: 'usable',
+  url: 'file://' + htmlPath,
+  beforeParse(window) {
+    window.addEventListener('error', e => errors.push(e.message));
+  }
+});
+
+const { window } = dom;
+const { document: d } = window;
+
+function ok(cond, msg) {
+  if (!cond) throw new Error('FAIL: ' + msg);
+  console.log('PASS: ' + msg);
+}
+
+function change(id, value) {
+  const el = d.getElementById(id);
+  el.value = value;
+  el.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
+
+function input(id, value) {
+  const el = d.getElementById(id);
+  el.value = value;
+  el.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
+
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    try {
+      ok(d.querySelector('#profit-kpis').innerHTML.length > 200, 'profit KPIs rendered');
+      ok(d.querySelector('#mini-summary').textContent.includes('月毛利'), 'mini summary rendered');
+      ok(d.querySelectorAll('#heatmap-wrap table tr').length >= 3, 'heatmap table rendered');
+      ok(d.querySelector('#rent-buy-wrap').textContent.includes('采购'), 'rent-buy compare rendered');
+      ok(d.querySelector('#biz-note').textContent.includes('官方参考价'), 'official hint rendered');
+      ok(d.querySelectorAll('#capacity-kpis .kpi').length >= 6, 'capacity KPIs rendered');
+      ok(d.querySelector('#source-list').children.length >= 10, 'sources rendered');
+
+      d.querySelector('[data-scenario="premium"]').click();
+      ok(d.getElementById('biz-mode').value === 'premium', 'premium scenario sets mode');
+      ok(Math.abs(parseFloat(d.getElementById('biz-out-price').value) - 3) < 1e-6, 'premium scenario sets USD price 3');
+
+      d.querySelector('[data-scenario="official"]').click();
+      ok(d.getElementById('biz-mode').value === 'official', 'official scenario sets mode');
+      ok(Math.abs(parseFloat(d.getElementById('biz-out-price').value) - 4.5 / 7.2) < 0.02, 'official scenario sets USD price');
+      ok(d.getElementById('biz-peak-share').value === '33', 'official scenario sets peak share 33%');
+
+      d.querySelector('[data-scenario="private"]').click();
+      ok(d.getElementById('biz-mode').value === 'private', 'private scenario sets mode');
+      ok(d.getElementById('biz-private-nodes').value === '5', 'private scenario sets all nodes');
+      ok(d.getElementById('sens-price-min').value === '5', 'private scenario switches sensitivity axis to contract');
+
+      input('gpu-rent', 4);
+      ok(parseFloat(d.getElementById('gpu-rent').value) === 4, 'rent input applied');
+
+      change('currency-select', 'CNY');
+      ok(Math.abs(parseFloat(d.getElementById('gpu-rent').value) - 4 * 7.2) < 0.01, 'currency switch converts money (rent)');
+      ok(Math.abs(parseFloat(d.getElementById('biz-contract').value) - 25000 * 7.2) < 1, 'currency switch converts money (contract)');
+
+      change('model-key', 'v4-pro-fp4');
+      ok(d.getElementById('model-total-params').value === '1600', 'model preset applies params');
+
+      input('gpu-nodes', -3);
+      ok(parseFloat(d.getElementById('gpu-nodes').value) >= 1, 'node count clamped');
+
+      ok(errors.length === 0, 'no uncaught errors: ' + errors.join(' | '));
+      console.log('\nDOM smoke test passed.');
+    } catch (e) {
+      console.error(e.message);
+      process.exitCode = 1;
+    } finally {
+      window.close();
+    }
+  }, 300);
+});

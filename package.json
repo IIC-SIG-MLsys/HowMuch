@@ -1,0 +1,13 @@
+{
+  "name": "howmuch-ai-cost-calculator",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Static AI deployment cost / revenue calculator, deployable to GitHub Pages.",
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:dom": "node tests/smoke-dom.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
+  }
+}

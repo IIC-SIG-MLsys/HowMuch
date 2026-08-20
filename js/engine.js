@@ -1,11 +1,140 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// 正式计算引擎（覆盖 js/data.js 中的早期同名草稿函数）
-// 依赖：data.js 提供的预设、defaultState、deepClone、applyGpuPreset 等
+// 计算引擎（唯一正式实现）
+// 依赖：data.js 提供的预设、defaultState、deepClone、apply*Preset 等
 // ---------------------------------------------------------------------------
 
-// 月度成本（修正：可变电费斜率在 U=0 时也正确）
+function clamp(v, min, max) {
+  const n = Number(v);
+  if (!isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+// 清洗状态：保证数值合法，避免 NaN 传播
+function normalizeState(state) {
+  const s = state;
+  s.nodes = Math.round(clamp(s.nodes, 1, 128));
+  s.gpusPerNode = Math.round(clamp(s.gpusPerNode, 1, 16));
+  s.model.totalParamsB = clamp(s.model.totalParamsB, 0.1, 100000);
+  s.model.activeParamsB = clamp(s.model.activeParamsB, 0.01, 100000);
+  s.model.bytesPerParam = clamp(s.model.bytesPerParam, 0.01, 4);
+  s.model.kvBytesPerToken = clamp(s.model.kvBytesPerToken, 1, 1e6);
+  s.model.contextLen = clamp(s.model.contextLen, 1, 1e8);
+  s.model.avgInputLen = clamp(s.model.avgInputLen, 1, 1e7);
+  s.model.avgOutputLen = clamp(s.model.avgOutputLen, 1, 1e7);
+  s.model.inputOutputRatio = clamp(s.model.inputOutputRatio, 0.01, 1000);
+  s.model.overheadPct = clamp(s.model.overheadPct, 0, 500);
+
+  s.gpu.hbmGB = clamp(s.gpu.hbmGB, 1, 10000);
+  s.gpu.bandwidthTBps = clamp(s.gpu.bandwidthTBps, 0.01, 100);
+  s.gpu.fp8TFLOPS = clamp(s.gpu.fp8TFLOPS, 1, 1e6);
+  s.gpu.tdpW = clamp(s.gpu.tdpW, 1, 10000);
+  s.gpu.rentPerHour = clamp(s.gpu.rentPerHour, 0, 1e6);
+  s.gpu.reservedDiscountPct = clamp(s.gpu.reservedDiscountPct, 0, 90);
+  s.gpu.purchasePrice = clamp(s.gpu.purchasePrice, 0, 1e9);
+  s.gpu.coloPerNodeMonth = clamp(s.gpu.coloPerNodeMonth, 0, 1e7);
+
+  s.opt.dsparkSpeedup = clamp(s.opt.dsparkSpeedup, 1, 3);
+  s.opt.cacheHitPct = clamp(s.opt.cacheHitPct, 0, 99);
+  s.opt.hostKvGB = clamp(s.opt.hostKvGB, 0, 1e6);
+  s.opt.bwUtilPct = clamp(s.opt.bwUtilPct, 1, 99);
+  s.opt.prefillEffPct = clamp(s.opt.prefillEffPct, 1, 100);
+  s.opt.pdSplitGainPct = clamp(s.opt.pdSplitGainPct, 0, 100);
+  s.opt.singleStreamTps = clamp(s.opt.singleStreamTps, 1, 1e6);
+  s.opt.reserveGB = clamp(s.opt.reserveGB, 0, 1e6);
+
+  s.biz.utilizationPct = clamp(s.biz.utilizationPct, 0, 100);
+  s.biz.peakSharePct = clamp(s.biz.peakSharePct, 0, 100);
+  s.biz.peakMult = clamp(s.biz.peakMult, 1, 10);
+  s.biz.outputPrice = clamp(s.biz.outputPrice, 0, 1e6);
+  s.biz.inputPrice = clamp(s.biz.inputPrice, 0, 1e6);
+  s.biz.cachedInputPrice = clamp(s.biz.cachedInputPrice, 0, 1e6);
+  s.biz.privateNodes = Math.round(clamp(s.biz.privateNodes, 0, s.nodes));
+  s.biz.contractPerNodeMonth = clamp(s.biz.contractPerNodeMonth, 0, 1e9);
+
+  s.cost.elecPerKWh = clamp(s.cost.elecPerKWh, 0, 100);
+  s.cost.pue = clamp(s.cost.pue, 1, 5);
+  s.cost.idlePowerPct = clamp(s.cost.idlePowerPct, 0, 100);
+  s.cost.amortMonths = Math.round(clamp(s.cost.amortMonths, 1, 120));
+  s.cost.maintPctPerYear = clamp(s.cost.maintPctPerYear, 0, 50);
+  s.cost.coloPerNodeMonth = clamp(s.cost.coloPerNodeMonth, 0, 1e7);
+
+  s.sensitivity.priceMin = clamp(s.sensitivity.priceMin, 0, 1e6);
+  s.sensitivity.priceMax = Math.max(s.sensitivity.priceMin + 0.01, clamp(s.sensitivity.priceMax, 0.01, 1e6));
+  s.sensitivity.priceStep = Math.max(0.01, clamp(s.sensitivity.priceStep, 0.01, 1e6));
+  s.sensitivity.utilMin = clamp(s.sensitivity.utilMin, 0, 100);
+  s.sensitivity.utilMax = Math.max(s.sensitivity.utilMin + 1, clamp(s.sensitivity.utilMax, 1, 100));
+  s.sensitivity.utilStep = clamp(s.sensitivity.utilStep, 1, 50);
+  s.sensitivity.tornadoPct = clamp(s.sensitivity.tornadoPct, 1, 100);
+  return s;
+}
+
+function computeModel(m) {
+  const weightGB = m.totalParamsB * m.bytesPerParam * (1 + m.overheadPct / 100);
+  const activeBytes = m.activeParamsB * 1e9 * m.bytesPerParam;
+  const ctxLen = m.avgInputLen + m.avgOutputLen;
+  const kvBytesPerReq = m.kvBytesPerToken * ctxLen;
+  return {
+    weightGB,
+    activeBytes,
+    ctxLen,
+    kvBytesPerReq,
+    kvMBPerReq: kvBytesPerReq / 1e6,
+    kvGBPerReq: kvBytesPerReq / 1e9
+  };
+}
+
+function computeNode(state) {
+  const g = state.gpu, m = state.model, o = state.opt;
+  const mm = computeModel(m);
+  const bytesPerTok = mm.activeBytes + mm.kvBytesPerReq;
+  const basePerGpu = (g.bandwidthTBps * 1e12) / bytesPerTok;
+  const effPerGpu = basePerGpu * o.bwUtilPct / 100;
+  const dsparkPerGpu = effPerGpu * (o.dsparkOn ? o.dsparkSpeedup : 1);
+  const pdFactor = o.pdSplitOn ? (1 + o.pdSplitGainPct / 100) : 1;
+  const nodeDecode = dsparkPerGpu * state.gpusPerNode * pdFactor;
+  const nodeDecodeNoDspark = effPerGpu * state.gpusPerNode * pdFactor;
+
+  const flopsPerTok = 2 * m.activeParamsB * 1e9;
+  const nodePrefill = g.fp8TFLOPS * 1e12 / flopsPerTok * state.gpusPerNode * o.prefillEffPct / 100;
+
+  const nodeTheoretical = (g.bandwidthTBps * 1e12) / bytesPerTok * state.gpusPerNode * pdFactor;
+  const requiredConcurrency = Math.max(1, Math.ceil(
+    nodeTheoretical * o.bwUtilPct / 100 / o.singleStreamTps
+  ));
+
+  const hbmTotal = state.gpusPerNode * g.hbmGB;
+  const hbmFree = hbmTotal - mm.weightGB - o.reserveGB;
+  const hbmCap = hbmFree > 0 ? Math.floor(hbmFree / mm.kvGBPerReq) : 0;
+  const offloadCap = o.offloadOn ? Math.floor(o.hostKvGB / mm.kvGBPerReq) : 0;
+
+  return {
+    ...mm,
+    basePerGpu,
+    effPerGpu,
+    dsparkPerGpu,
+    pdFactor,
+    nodeDecode,
+    nodeDecodeNoDspark,
+    nodePrefill,
+    nodeTheoretical,
+    requiredConcurrency,
+    hbmTotal,
+    hbmFree,
+    hbmCap,
+    offloadCap,
+    kvCapTotal: hbmCap + offloadCap,
+    fits: hbmFree >= 0
+  };
+}
+
+function blendedPrices(state) {
+  const b = state.biz;
+  const f = base => base * (1 + b.peakSharePct / 100 * (b.peakMult - 1));
+  return { out: f(b.outputPrice), in: f(b.inputPrice), cached: f(b.cachedInputPrice) };
+}
+
 function calcCosts(state, U) {
   const g = state.gpu, c = state.cost;
   const nodes = state.nodes;
@@ -36,8 +165,8 @@ function calcCosts(state, U) {
   };
 }
 
-// 完整收益结果（修正盈亏平衡公式）
 function calcResults(state) {
+  normalizeState(state);
   const n = computeNode(state);
   const b = state.biz;
   const U = b.utilizationPct / 100;
@@ -55,6 +184,8 @@ function calcResults(state) {
   const inCapped = needInTokH > inCapH + 1;
   const outTokM = outTokH * 730;
   const inTokM = inTokH * 730;
+  const billableTokH = outTokH + inTokH;
+  const billableTokM = outTokM + inTokM;
 
   const p = blendedPrices(state);
   const hit = state.opt.kvPoolOn ? state.opt.cacheHitPct / 100 : 0;
@@ -68,11 +199,15 @@ function calcResults(state) {
   const profitPerM = revenuePerM - cost.total;
   const margin = revenuePerM > 0 ? profitPerM / revenuePerM * 100 : null;
 
-  // 每单位负载率（0→1）对应的收入与可变电费斜率
+  // 单节点满负载收入/h（API 口径，U=100%）
   const outTokHPerNodeU1 = n.nodeDecode * 3600;
   const needInTokHPerNodeU1 = outTokHPerNodeU1 * state.model.inputOutputRatio;
-  const inCapHPerNodeU1 = n.nodePrefill * 3600;
-  const inTokHPerNodeU1 = Math.min(needInTokHPerNodeU1, inCapHPerNodeU1);
+  const inTokHPerNodeU1 = Math.min(needInTokHPerNodeU1, n.nodePrefill * 3600);
+  const maxRevPerHPerApiNode = (
+    (outTokHPerNodeU1 * p.out + inTokHPerNodeU1 * (hit * p.cached + (1 - hit) * p.in)) / 1e6
+  );
+
+  // 每单位负载率（0→1）对应的收入与可变电费斜率
   const apiUnitRevPerM = (
     (outTokHPerNodeU1 * p.out + inTokHPerNodeU1 * (hit * p.cached + (1 - hit) * p.in)) / 1e6 * 730 * apiNodes
   );
@@ -81,24 +216,29 @@ function calcResults(state) {
   if (apiNodes > 0) {
     if (denom > 0) {
       breakEvenUtil = (cost.fixedCost - privateRevPerM) / denom * 100;
-      breakEvenUtil = Math.max(0, Math.min(120, breakEvenUtil));
+      breakEvenUtil = Math.max(0, Math.min(110, breakEvenUtil));
     } else {
-      breakEvenUtil = null; // 永远无法盈亏平衡
+      breakEvenUtil = null;
     }
   }
 
-  // 盈亏平衡输出价（API 场景，给定当前负载率）
   let breakEvenPrice = null;
   if (apiNodes > 0 && outTokM > 0) {
     const inputRev = inTokM * (hit * p.cached + (1 - hit) * p.in) / 1e6;
     breakEvenPrice = (cost.total - privateRevPerM - inputRev) * 1e6 / outTokM;
   }
 
-  // 采购回本周期
+  // 私有化合同盈亏平衡价（月/节点）
+  let breakEvenContract = null;
+  if (privateNodes > 0) breakEvenContract = cost.total / privateNodes;
+
   let paybackMonths = null;
   if (state.cost.rentMode === 'buy' && profitPerM > 0) {
     paybackMonths = state.nodes * state.gpu.purchasePrice / profitPerM;
   }
+
+  const costPerMOut = outTokM > 0 ? cost.total / outTokM : null;
+  const revPerMOut = outTokM > 0 ? revenuePerM / outTokM : null;
 
   return {
     node: n,
@@ -106,29 +246,43 @@ function calcResults(state) {
     apiNodes,
     privateNodes,
     outTokH, inTokH, outTokM, inTokM,
+    billableTokH, billableTokM,
     inCapped,
     apiRevPerH, apiRevPerM,
     privateRevPerM,
     revenuePerH, revenuePerM,
+    revPerHPerNode: nodes > 0 ? revenuePerH / nodes : 0,
+    maxRevPerHPerApiNode,
     cost,
     profitPerM,
     margin,
     breakEvenUtil,
     breakEvenPrice,
+    breakEvenContract,
     paybackMonths,
+    costPerMOut,
+    revPerMOut,
     currency: state.currency
   };
 }
 
-// 敏感性矩阵：负载率 × 输出价格（私有化模式时改为合同价）
+// 生成不超过 maxPoints 个点的坐标轴
+function buildAxis(min, max, step, maxPoints) {
+  const out = [];
+  const raw = [];
+  for (let v = min; v <= max + 1e-9; v += step) raw.push(Math.round(v * 10000) / 10000);
+  if (raw.length <= maxPoints) return raw;
+  const k = Math.ceil(raw.length / maxPoints);
+  for (let i = 0; i < raw.length; i += k) out.push(raw[i]);
+  if (out[out.length - 1] !== raw[raw.length - 1]) out.push(raw[raw.length - 1]);
+  return out;
+}
+
 function sensitivityMatrix(state) {
   const s = state.sensitivity;
+  const usages = buildAxis(s.utilMin, s.utilMax, s.utilStep, 21);
+  const prices = buildAxis(s.priceMin, s.priceMax, s.priceStep, 21);
   const rows = [];
-  const usages = [];
-  const prices = [];
-  for (let u = s.utilMin; u <= s.utilMax + 1e-9; u += s.utilStep) usages.push(Math.round(u * 10) / 10);
-  for (let p = s.priceMin; p <= s.priceMax + 1e-9; p += s.priceStep) prices.push(Math.round(p * 100) / 100);
-
   const isPrivate = state.biz.mode === 'private';
   for (const u of usages) {
     const row = [];
@@ -144,22 +298,36 @@ function sensitivityMatrix(state) {
   return { usages, prices, rows, isPrivate };
 }
 
-// Tornado：关键参数 ±tornadoPct 对月毛利的影响
 function tornado(state) {
   const pct = state.sensitivity.tornadoPct / 100;
   const base = calcResults(state).profitPerM;
   const items = [];
-  const defs = [
-    ['输出单价', s => { s.biz.outputPrice *= 1 + pct; }, s => { s.biz.outputPrice *= 1 - pct; }],
-    ['输入单价', s => { s.biz.inputPrice *= 1 + pct; }, s => { s.biz.inputPrice *= 1 - pct; }],
-    ['负载率', s => { s.biz.utilizationPct = Math.min(100, s.biz.utilizationPct * (1 + pct)); }, s => { s.biz.utilizationPct = Math.max(1, s.biz.utilizationPct * (1 - pct)); }],
-    ['缓存命中率', s => { s.opt.cacheHitPct = Math.min(100, s.opt.cacheHitPct * (1 + pct)); }, s => { s.opt.cacheHitPct = Math.max(0, s.opt.cacheHitPct * (1 - pct)); }],
-    ['DSpark 加速', s => { s.opt.dsparkSpeedup = Math.min(2.5, s.opt.dsparkSpeedup * (1 + pct)); }, s => { s.opt.dsparkSpeedup = Math.max(1, s.opt.dsparkSpeedup * (1 - pct)); }],
-    ['带宽利用率', s => { s.opt.bwUtilPct = Math.min(95, s.opt.bwUtilPct * (1 + pct)); }, s => { s.opt.bwUtilPct = Math.max(5, s.opt.bwUtilPct * (1 - pct)); }],
+  const isPrivate = state.biz.mode === 'private';
+  const isHybrid = state.biz.mode === 'hybrid';
+
+  const defs = [];
+  if (!isPrivate) {
+    defs.push(
+      ['输出单价', s => { s.biz.outputPrice *= 1 + pct; }, s => { s.biz.outputPrice *= 1 - pct; }],
+      ['输入单价', s => { s.biz.inputPrice *= 1 + pct; }, s => { s.biz.inputPrice *= 1 - pct; }],
+      ['负载率', s => { s.biz.utilizationPct = Math.min(100, s.biz.utilizationPct * (1 + pct)); }, s => { s.biz.utilizationPct = Math.max(1, s.biz.utilizationPct * (1 - pct)); }],
+      ['缓存命中率', s => { s.opt.cacheHitPct = Math.min(99, s.opt.cacheHitPct * (1 + pct)); }, s => { s.opt.cacheHitPct = Math.max(0, s.opt.cacheHitPct * (1 - pct)); }],
+      ['DSpark 加速', s => { s.opt.dsparkSpeedup = Math.min(3, s.opt.dsparkSpeedup * (1 + pct)); }, s => { s.opt.dsparkSpeedup = Math.max(1, s.opt.dsparkSpeedup * (1 - pct)); }],
+      ['带宽利用率', s => { s.opt.bwUtilPct = Math.min(99, s.opt.bwUtilPct * (1 + pct)); }, s => { s.opt.bwUtilPct = Math.max(1, s.opt.bwUtilPct * (1 - pct)); }]
+    );
+  }
+  defs.push(
     ['单卡时租', s => { s.gpu.rentPerHour *= 1 + pct; }, s => { s.gpu.rentPerHour *= 1 - pct; }],
-    ['预留折扣', s => { s.gpu.reservedDiscountPct = Math.min(80, s.gpu.reservedDiscountPct + pct * 100); }, s => { s.gpu.reservedDiscountPct = Math.max(0, s.gpu.reservedDiscountPct - pct * 100); }],
-    ['私有化合同', s => { s.biz.contractPerNodeMonth *= 1 + pct; }, s => { s.biz.contractPerNodeMonth *= 1 - pct; }]
-  ];
+    ['预留折扣', s => { s.gpu.reservedDiscountPct = Math.min(90, s.gpu.reservedDiscountPct + pct * 100); }, s => { s.gpu.reservedDiscountPct = Math.max(0, s.gpu.reservedDiscountPct - pct * 100); }],
+    ['电价', s => { s.cost.elecPerKWh *= 1 + pct; }, s => { s.cost.elecPerKWh *= 1 - pct; }],
+    ['机房/运维', s => { s.cost.coloPerNodeMonth *= 1 + pct; }, s => { s.cost.coloPerNodeMonth *= 1 - pct; }]
+  );
+  if (isPrivate || isHybrid) {
+    defs.push(
+      ['私有化合同', s => { s.biz.contractPerNodeMonth *= 1 + pct; }, s => { s.biz.contractPerNodeMonth *= 1 - pct; }]
+    );
+  }
+
   for (const [label, up, down] of defs) {
     const su = deepClone(state); up(su);
     const sd = deepClone(state); down(sd);
@@ -173,7 +341,6 @@ function tornado(state) {
   return items;
 }
 
-// 同配置换卡对比（H100 / H200 / B300）
 function compareGpus(state) {
   const out = [];
   for (const key of ['h100', 'h200', 'b300']) {
@@ -185,9 +352,11 @@ function compareGpus(state) {
       name: st.gpu.name,
       decodeTps: r.node.nodeDecode,
       outTokH: r.node.nodeDecode * 3600 * r.U * Math.max(r.apiNodes, 1),
+      billableTokH: r.billableTokH,
       revPerM: r.revenuePerM,
       costPerM: r.cost.total,
       profitPerM: r.profitPerM,
+      profitPerNode: r.profitPerM / st.nodes,
       breakEvenUtil: r.breakEvenUtil,
       fits: r.node.fits
     });
@@ -195,10 +364,9 @@ function compareGpus(state) {
   return out;
 }
 
-// 负载率-利润曲线（0–120%）
 function profitCurve(state) {
   const curve = [];
-  for (let u = 0; u <= 120; u += 5) {
+  for (let u = 0; u <= 110; u += 5) {
     const st = deepClone(state);
     st.biz.utilizationPct = u;
     const r = calcResults(st);
@@ -207,6 +375,38 @@ function profitCurve(state) {
   return curve;
 }
 
+// 租 vs 买：months 个月总成本对比（均含电费与运维）
+function rentBuyCompare(state, months = 36) {
+  const g = state.gpu, c = state.cost;
+  const U = state.biz.utilizationPct / 100;
+  const nodes = state.nodes;
+  const gpuH = nodes * state.gpusPerNode;
+  const hours = 730;
+  const powerPerGpuAtFull = g.tdpW / 1000 * hours * c.elecPerKWh * c.pue;
+  const powerIdle = powerPerGpuAtFull * gpuH * c.idlePowerPct / 100;
+  const power = powerIdle + powerPerGpuAtFull * gpuH * (1 - c.idlePowerPct / 100) * U;
+  const ops = nodes * c.coloPerNodeMonth;
+  const rentMonthly = gpuH * g.rentPerHour * hours * (1 - g.reservedDiscountPct / 100) + power + ops;
+  const maintMonthly = nodes * g.purchasePrice * c.maintPctPerYear / 100 / 12;
+  const buyMonthly = maintMonthly + power + ops;
+  const rentTotal = rentMonthly * months;
+  const buyTotal = nodes * g.purchasePrice + buyMonthly * months;
+  return {
+    months,
+    rentTotal: round1(rentTotal),
+    buyTotal: round1(buyTotal),
+    rentMonthly: round1(rentMonthly),
+    buyMonthly: round1(buyMonthly),
+    buySaving: round1(rentTotal - buyTotal) // >0 表示买更省
+  };
+}
+
+function round1(x) { return Math.round(x * 10) / 10; }
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcCosts, calcResults, sensitivityMatrix, tornado, compareGpus, profitCurve };
+  module.exports = {
+    clamp, normalizeState, computeModel, computeNode, blendedPrices,
+    calcCosts, calcResults, sensitivityMatrix, tornado, compareGpus,
+    profitCurve, rentBuyCompare, round1
+  };
 }

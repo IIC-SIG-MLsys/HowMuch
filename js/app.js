@@ -1,6 +1,6 @@
 'use strict';
 
-const STORE_KEY = 'howmuch-state-v1';
+const STORE_KEY = 'howmuch-state-v2';
 
 const SOURCES = [
   { name: 'DeepSeek-V4 发布与规格（V4-Pro 1.6T/49B、V4-Flash 284B/13B、1M 上下文、MIT）', url: 'https://developer.aliyun.com/article/1730877', date: '2026-04-23' },
@@ -27,71 +27,111 @@ const SOURCES = [
 const App = (() => {
   let state = loadState();
   const $ = id => document.getElementById(id);
+
+  // [id, getter, setter, min, max]
   const fieldMap = [
-    ['model-total-params', s => s.model.totalParamsB],
-    ['model-active-params', s => s.model.activeParamsB],
-    ['model-bytes-per-param', s => s.model.bytesPerParam],
-    ['model-kv-bytes', s => s.model.kvBytesPerToken],
-    ['model-context-len', s => s.model.contextLen],
-    ['model-avg-input', s => s.model.avgInputLen],
-    ['model-avg-output', s => s.model.avgOutputLen],
-    ['model-ratio', s => s.model.inputOutputRatio],
-    ['model-overhead', s => s.model.overheadPct],
-    ['gpu-nodes', s => s.nodes],
-    ['gpu-per-node', s => s.gpusPerNode],
-    ['gpu-hbm', s => s.gpu.hbmGB],
-    ['gpu-bw', s => s.gpu.bandwidthGBps],
-    ['gpu-fp8', s => s.gpu.fp8TFLOPS],
-    ['gpu-tdp', s => s.gpu.tdpW],
-    ['gpu-rent', s => s.gpu.rentPerHour],
-    ['gpu-discount', s => s.gpu.reservedDiscountPct],
-    ['gpu-purchase', s => s.gpu.purchasePrice],
-    ['opt-single-stream', s => s.opt.singleStreamTps],
-    ['opt-dspark-speedup', s => s.opt.dsparkSpeedup],
-    ['opt-hit', s => s.opt.cacheHitPct],
-    ['opt-hostkv', s => s.opt.hostKvGB],
-    ['opt-bwutil', s => s.opt.bwUtilPct],
-    ['opt-prefill-eff', s => s.opt.prefillEffPct],
-    ['opt-reserve', s => s.opt.reserveGB],
-    ['biz-util', s => s.biz.utilizationPct],
-    ['biz-peak-share', s => s.biz.peakSharePct],
-    ['biz-peak-mult', s => s.biz.peakMult],
-    ['biz-out-price', s => s.biz.outputPrice],
-    ['biz-in-price', s => s.biz.inputPrice],
-    ['biz-cached-price', s => s.biz.cachedInputPrice],
-    ['biz-private-nodes', s => s.biz.privateNodes],
-    ['biz-contract', s => s.biz.contractPerNodeMonth],
-    ['cost-elec', s => s.cost.elecPerKWh],
-    ['cost-pue', s => s.cost.pue],
-    ['cost-idle', s => s.cost.idlePowerPct],
-    ['cost-amort', s => s.cost.amortMonths],
-    ['cost-maint', s => s.cost.maintPctPerYear],
-    ['cost-colo', s => s.cost.coloPerNodeMonth],
-    ['sens-price-min', s => s.sensitivity.priceMin],
-    ['sens-price-max', s => s.sensitivity.priceMax],
-    ['sens-price-step', s => s.sensitivity.priceStep],
-    ['sens-util-min', s => s.sensitivity.utilMin],
-    ['sens-util-max', s => s.sensitivity.utilMax],
-    ['sens-util-step', s => s.sensitivity.utilStep],
-    ['sens-tornado', s => s.sensitivity.tornadoPct]
+    ['model-total-params', s => s.model.totalParamsB, (s, v) => s.model.totalParamsB = v, 0.1, 100000],
+    ['model-active-params', s => s.model.activeParamsB, (s, v) => s.model.activeParamsB = v, 0.01, 100000],
+    ['model-bytes-per-param', s => s.model.bytesPerParam, (s, v) => s.model.bytesPerParam = v, 0.01, 4],
+    ['model-kv-bytes', s => s.model.kvBytesPerToken, (s, v) => s.model.kvBytesPerToken = v, 1, 1e6],
+    ['model-context-len', s => s.model.contextLen, (s, v) => s.model.contextLen = v, 1, 1e8],
+    ['model-avg-input', s => s.model.avgInputLen, (s, v) => s.model.avgInputLen = v, 1, 1e7],
+    ['model-avg-output', s => s.model.avgOutputLen, (s, v) => s.model.avgOutputLen = v, 1, 1e7],
+    ['model-ratio', s => s.model.inputOutputRatio, (s, v) => s.model.inputOutputRatio = v, 0.01, 1000],
+    ['model-overhead', s => s.model.overheadPct, (s, v) => s.model.overheadPct = v, 0, 500],
+    ['gpu-nodes', s => s.nodes, (s, v) => s.nodes = v, 1, 128],
+    ['gpu-per-node', s => s.gpusPerNode, (s, v) => s.gpusPerNode = v, 1, 16],
+    ['gpu-hbm', s => s.gpu.hbmGB, (s, v) => s.gpu.hbmGB = v, 1, 10000],
+    ['gpu-bw', s => s.gpu.bandwidthTBps, (s, v) => s.gpu.bandwidthTBps = v, 0.01, 100],
+    ['gpu-fp8', s => s.gpu.fp8TFLOPS, (s, v) => s.gpu.fp8TFLOPS = v, 1, 1e6],
+    ['gpu-tdp', s => s.gpu.tdpW, (s, v) => s.gpu.tdpW = v, 1, 10000],
+    ['gpu-rent', s => s.gpu.rentPerHour, (s, v) => s.gpu.rentPerHour = v, 0, 1e6],
+    ['gpu-discount', s => s.gpu.reservedDiscountPct, (s, v) => s.gpu.reservedDiscountPct = v, 0, 90],
+    ['gpu-purchase', s => s.gpu.purchasePrice, (s, v) => s.gpu.purchasePrice = v, 0, 1e9],
+    ['opt-single-stream', s => s.opt.singleStreamTps, (s, v) => s.opt.singleStreamTps = v, 1, 1e6],
+    ['opt-dspark-speedup', s => s.opt.dsparkSpeedup, (s, v) => s.opt.dsparkSpeedup = v, 1, 3],
+    ['opt-hit', s => s.opt.cacheHitPct, (s, v) => s.opt.cacheHitPct = v, 0, 99],
+    ['opt-hostkv', s => s.opt.hostKvGB, (s, v) => s.opt.hostKvGB = v, 0, 1e6],
+    ['opt-bwutil', s => s.opt.bwUtilPct, (s, v) => s.opt.bwUtilPct = v, 1, 99],
+    ['opt-prefill-eff', s => s.opt.prefillEffPct, (s, v) => s.opt.prefillEffPct = v, 1, 100],
+    ['opt-pd-gain', s => s.opt.pdSplitGainPct, (s, v) => s.opt.pdSplitGainPct = v, 0, 100],
+    ['opt-reserve', s => s.opt.reserveGB, (s, v) => s.opt.reserveGB = v, 0, 1e6],
+    ['biz-util', s => s.biz.utilizationPct, (s, v) => s.biz.utilizationPct = v, 0, 100],
+    ['biz-peak-share', s => s.biz.peakSharePct, (s, v) => s.biz.peakSharePct = v, 0, 100],
+    ['biz-peak-mult', s => s.biz.peakMult, (s, v) => s.biz.peakMult = v, 1, 10],
+    ['biz-out-price', s => s.biz.outputPrice, (s, v) => s.biz.outputPrice = v, 0, 1e6],
+    ['biz-in-price', s => s.biz.inputPrice, (s, v) => s.biz.inputPrice = v, 0, 1e6],
+    ['biz-cached-price', s => s.biz.cachedInputPrice, (s, v) => s.biz.cachedInputPrice = v, 0, 1e6],
+    ['biz-private-nodes', s => s.biz.privateNodes, (s, v) => s.biz.privateNodes = v, 0, 128],
+    ['biz-contract', s => s.biz.contractPerNodeMonth, (s, v) => s.biz.contractPerNodeMonth = v, 0, 1e9],
+    ['cost-elec', s => s.cost.elecPerKWh, (s, v) => s.cost.elecPerKWh = v, 0, 100],
+    ['cost-pue', s => s.cost.pue, (s, v) => s.cost.pue = v, 1, 5],
+    ['cost-idle', s => s.cost.idlePowerPct, (s, v) => s.cost.idlePowerPct = v, 0, 100],
+    ['cost-amort', s => s.cost.amortMonths, (s, v) => s.cost.amortMonths = v, 1, 120],
+    ['cost-maint', s => s.cost.maintPctPerYear, (s, v) => s.cost.maintPctPerYear = v, 0, 50],
+    ['cost-colo', s => s.cost.coloPerNodeMonth, (s, v) => s.cost.coloPerNodeMonth = v, 0, 1e7],
+    ['sens-price-min', s => s.sensitivity.priceMin, (s, v) => s.sensitivity.priceMin = v, 0, 1e6],
+    ['sens-price-max', s => s.sensitivity.priceMax, (s, v) => s.sensitivity.priceMax = v, 0.01, 1e6],
+    ['sens-price-step', s => s.sensitivity.priceStep, (s, v) => s.sensitivity.priceStep = v, 0.01, 1e6],
+    ['sens-util-min', s => s.sensitivity.utilMin, (s, v) => s.sensitivity.utilMin = v, 0, 100],
+    ['sens-util-max', s => s.sensitivity.utilMax, (s, v) => s.sensitivity.utilMax = v, 1, 100],
+    ['sens-util-step', s => s.sensitivity.utilStep, (s, v) => s.sensitivity.utilStep = v, 1, 50],
+    ['sens-tornado', s => s.sensitivity.tornadoPct, (s, v) => s.sensitivity.tornadoPct = v, 1, 100]
   ];
 
+  // ---------- 状态加载 / 保存 / 分享 ----------
+
   function loadState() {
+    const base = defaultState();
+    const hashState = decodeHash();
+    if (hashState) return Object.assign(base, migrateState(hashState));
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.model && parsed.gpu) {
-          const base = defaultState();
-          return Object.assign(base, parsed);
-        }
+        if (parsed && parsed.model && parsed.gpu) return Object.assign(base, migrateState(parsed));
       }
     } catch (e) { /* ignore */ }
-    return defaultState();
+    return base;
+  }
+
+  function migrateState(parsed) {
+    // v1 使用 bandwidthGBps 字段（实际存的是 TB/s 数值），迁移到 v2 字段名
+    if (parsed.gpu && parsed.gpu.bandwidthGBps !== undefined && parsed.gpu.bandwidthTBps === undefined) {
+      parsed.gpu.bandwidthTBps = parsed.gpu.bandwidthGBps;
+      delete parsed.gpu.bandwidthGBps;
+    }
+    return parsed;
+  }
+
+  function encodeState() {
+    try {
+      const json = JSON.stringify(state);
+      return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function decodeHash() {
+    const hash = location.hash.slice(1);
+    if (!hash) return null;
+    try {
+      const b64 = hash.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(escape(atob(b64)));
+      const parsed = JSON.parse(json);
+      return (parsed && parsed.model && parsed.gpu) ? parsed : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   function saveState() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    const enc = encodeState();
+    if (enc && enc.length < 12000) {
+      try { history.replaceState(null, '', '#' + enc); } catch (e) { /* file:// 或受限环境 */ }
+    }
   }
 
   function currencySymbol() {
@@ -100,23 +140,31 @@ const App = (() => {
 
   function fmtMoney(v, compact = false) {
     const sym = currencySymbol();
-    if (compact && Math.abs(v) >= 1e6) return sym + (v / 1e6).toFixed(2) + 'M';
-    if (compact && Math.abs(v) >= 1e4) return sym + (v / 1e3).toFixed(1) + 'k';
-    if (compact && Math.abs(v) >= 1000) return sym + (v / 1e3).toFixed(2) + 'k';
-    return sym + Math.round(v).toLocaleString();
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    if (compact && Math.abs(n) >= 1e6) return sym + (n / 1e6).toFixed(2) + 'M';
+    if (compact && Math.abs(n) >= 1e4) return sym + (n / 1e3).toFixed(1) + 'k';
+    if (compact && Math.abs(n) >= 1000) return sym + (n / 1e3).toFixed(2) + 'k';
+    if (Math.abs(n) < 1) return sym + n.toFixed(4);
+    if (Math.abs(n) < 100) return sym + n.toFixed(2);
+    return sym + Math.round(n).toLocaleString();
   }
 
   function fmtTok(v) {
-    if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-    if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-    if (v >= 1e3) return (v / 1e3).toFixed(1) + 'k';
-    return Math.round(v).toLocaleString();
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+    return Math.round(n).toLocaleString();
   }
 
   function fmtNum(v, digits = 0) {
     if (v === null || v === undefined || !isFinite(v)) return '—';
     return Number(v).toLocaleString('zh-CN', { maximumFractionDigits: digits });
   }
+
+  // ---------- 表单 ----------
 
   function populateForm() {
     $('currency-select').value = state.currency;
@@ -127,98 +175,71 @@ const App = (() => {
     $('opt-dspark').checked = state.opt.dsparkOn;
     $('opt-kvpool').checked = state.opt.kvPoolOn;
     $('opt-offload').checked = state.opt.offloadOn;
+    $('opt-pd').checked = state.opt.pdSplitOn;
     for (const [id, get] of fieldMap) {
       const el = $(id);
       if (el) el.value = get(state);
     }
     updateMoneyLabels();
+    updateScenarioChips();
   }
 
   function collectForm() {
-    const st = state;
-    st.modelKey = $('model-key').value;
-    st.gpuKey = $('gpu-key').value;
-    st.biz.mode = $('biz-mode').value;
-    st.cost.rentMode = $('cost-rent-mode').value;
-    st.opt.dsparkOn = $('opt-dspark').checked;
-    st.opt.kvPoolOn = $('opt-kvpool').checked;
-    st.opt.offloadOn = $('opt-offload').checked;
-    for (const [id, get, set] of fieldMapWithSetters()) {
+    state.modelKey = $('model-key').value;
+    state.gpuKey = $('gpu-key').value;
+    state.biz.mode = $('biz-mode').value;
+    state.cost.rentMode = $('cost-rent-mode').value;
+    state.opt.dsparkOn = $('opt-dspark').checked;
+    state.opt.kvPoolOn = $('opt-kvpool').checked;
+    state.opt.offloadOn = $('opt-offload').checked;
+    state.opt.pdSplitOn = $('opt-pd').checked;
+    for (const [id, get, set, min, max] of fieldMap) {
       const el = $(id);
       if (!el) continue;
       const v = parseFloat(el.value);
-      if (!isNaN(v)) set(st, v);
+      if (isNaN(v)) continue;
+      const clamped = clamp(v, min, max);
+      set(state, clamped);
+      el.value = clamped;
     }
-    // 校验私有化节点数
-    st.biz.privateNodes = Math.min(Math.max(0, st.biz.privateNodes), st.nodes);
-    return st;
+    state.biz.privateNodes = Math.round(clamp(state.biz.privateNodes, 0, state.nodes));
+    $('biz-private-nodes').value = state.biz.privateNodes;
+    if (state.sensitivity.priceMax <= state.sensitivity.priceMin) {
+      state.sensitivity.priceMax = state.sensitivity.priceMin + state.sensitivity.priceStep;
+      $('sens-price-max').value = state.sensitivity.priceMax;
+    }
+    if (state.sensitivity.utilMax <= state.sensitivity.utilMin) {
+      state.sensitivity.utilMax = state.sensitivity.utilMin + state.sensitivity.utilStep;
+      $('sens-util-max').value = state.sensitivity.utilMax;
+    }
+    return state;
   }
 
-  function fieldMapWithSetters() {
-    const setters = {
-      'model-total-params': (s, v) => s.model.totalParamsB = v,
-      'model-active-params': (s, v) => s.model.activeParamsB = v,
-      'model-bytes-per-param': (s, v) => s.model.bytesPerParam = v,
-      'model-kv-bytes': (s, v) => s.model.kvBytesPerToken = v,
-      'model-context-len': (s, v) => s.model.contextLen = v,
-      'model-avg-input': (s, v) => s.model.avgInputLen = v,
-      'model-avg-output': (s, v) => s.model.avgOutputLen = v,
-      'model-ratio': (s, v) => s.model.inputOutputRatio = v,
-      'model-overhead': (s, v) => s.model.overheadPct = v,
-      'gpu-nodes': (s, v) => s.nodes = v,
-      'gpu-per-node': (s, v) => s.gpusPerNode = v,
-      'gpu-hbm': (s, v) => s.gpu.hbmGB = v,
-      'gpu-bw': (s, v) => s.gpu.bandwidthGBps = v,
-      'gpu-fp8': (s, v) => s.gpu.fp8TFLOPS = v,
-      'gpu-tdp': (s, v) => s.gpu.tdpW = v,
-      'gpu-rent': (s, v) => s.gpu.rentPerHour = v,
-      'gpu-discount': (s, v) => s.gpu.reservedDiscountPct = v,
-      'gpu-purchase': (s, v) => s.gpu.purchasePrice = v,
-      'opt-single-stream': (s, v) => s.opt.singleStreamTps = v,
-      'opt-dspark-speedup': (s, v) => s.opt.dsparkSpeedup = v,
-      'opt-hit': (s, v) => s.opt.cacheHitPct = v,
-      'opt-hostkv': (s, v) => s.opt.hostKvGB = v,
-      'opt-bwutil': (s, v) => s.opt.bwUtilPct = v,
-      'opt-prefill-eff': (s, v) => s.opt.prefillEffPct = v,
-      'opt-reserve': (s, v) => s.opt.reserveGB = v,
-      'biz-util': (s, v) => s.biz.utilizationPct = v,
-      'biz-peak-share': (s, v) => s.biz.peakSharePct = v,
-      'biz-peak-mult': (s, v) => s.biz.peakMult = v,
-      'biz-out-price': (s, v) => s.biz.outputPrice = v,
-      'biz-in-price': (s, v) => s.biz.inputPrice = v,
-      'biz-cached-price': (s, v) => s.biz.cachedInputPrice = v,
-      'biz-private-nodes': (s, v) => s.biz.privateNodes = v,
-      'biz-contract': (s, v) => s.biz.contractPerNodeMonth = v,
-      'cost-elec': (s, v) => s.cost.elecPerKWh = v,
-      'cost-pue': (s, v) => s.cost.pue = v,
-      'cost-idle': (s, v) => s.cost.idlePowerPct = v,
-      'cost-amort': (s, v) => s.cost.amortMonths = v,
-      'cost-maint': (s, v) => s.cost.maintPctPerYear = v,
-      'cost-colo': (s, v) => s.cost.coloPerNodeMonth = v,
-      'sens-price-min': (s, v) => s.sensitivity.priceMin = v,
-      'sens-price-max': (s, v) => s.sensitivity.priceMax = v,
-      'sens-price-step': (s, v) => s.sensitivity.priceStep = v,
-      'sens-util-min': (s, v) => s.sensitivity.utilMin = v,
-      'sens-util-max': (s, v) => s.sensitivity.utilMax = v,
-      'sens-util-step': (s, v) => s.sensitivity.utilStep = v,
-      'sens-tornado': (s, v) => s.sensitivity.tornadoPct = v
-    };
-    return fieldMap.map(([id]) => [id, null, setters[id]]);
+  function clamp(v, min, max) {
+    const n = Number(v);
+    if (!isFinite(n)) return min;
+    return Math.min(max, Math.max(min, n));
   }
 
   function updateMoneyLabels() {
     const sym = currencySymbol();
     document.querySelectorAll('.field.money input').forEach(inp => {
       const label = inp.closest('.field')?.querySelector('span');
-      if (label && !label.dataset.base) {
-        label.dataset.base = label.textContent;
-      }
+      if (label && !label.dataset.base) label.dataset.base = label.textContent;
       if (label) {
-        const base = label.dataset.base.replace(/\s*\(.*\)$/, '').trim();
+        const base = label.dataset.base.replace(/\s*（.*）$/, '').trim();
         label.textContent = `${base}（${sym}）`;
       }
     });
   }
+
+  function updateScenarioChips() {
+    document.querySelectorAll('[data-scenario]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.scenario === state.biz.mode);
+    });
+  }
+
+  // ---------- 场景与预设 ----------
 
   function applyOfficialPrices() {
     const pricing = OFFICIAL_PRICING[state.modelKey] || OFFICIAL_PRICING['v4-flash'];
@@ -233,46 +254,75 @@ const App = (() => {
   }
 
   function applyScenario(scenario) {
+    const rate = CURRENCY_RATE[state.currency] || 1;
     if (scenario === 'official') {
       applyOfficialPrices();
     } else if (scenario === 'premium') {
       state.biz.mode = 'premium';
-      const rate = CURRENCY_RATE[state.currency] || 1;
-      state.biz.outputPrice = round2(3 * rate / 7.2);
-      state.biz.inputPrice = round2(0.3 * rate / 7.2);
-      state.biz.cachedInputPrice = round2(0.03 * rate / 7.2);
+      state.biz.outputPrice = round2(3 * rate);
+      state.biz.inputPrice = round2(0.3 * rate);
+      state.biz.cachedInputPrice = round2(0.03 * rate);
       state.biz.peakSharePct = 0;
       state.biz.peakMult = 1;
+      state.biz.privateNodes = 0;
     } else if (scenario === 'private') {
       state.biz.mode = 'private';
       state.biz.privateNodes = state.nodes;
-      state.biz.contractPerNodeMonth = round2(25000 * (CURRENCY_RATE[state.currency] || 1) / 7.2);
+      state.biz.contractPerNodeMonth = round2(25000 * rate);
     } else if (scenario === 'hybrid') {
       state.biz.mode = 'hybrid';
       state.biz.privateNodes = Math.min(2, state.nodes);
-      state.biz.contractPerNodeMonth = round2(25000 * (CURRENCY_RATE[state.currency] || 1) / 7.2);
-      const rate = CURRENCY_RATE[state.currency] || 1;
-      state.biz.outputPrice = round2(3 * rate / 7.2);
-      state.biz.inputPrice = round2(0.3 * rate / 7.2);
-      state.biz.cachedInputPrice = round2(0.03 * rate / 7.2);
+      state.biz.contractPerNodeMonth = round2(25000 * rate);
+      state.biz.outputPrice = round2(3 * rate);
+      state.biz.inputPrice = round2(0.3 * rate);
+      state.biz.cachedInputPrice = round2(0.03 * rate);
       state.biz.peakSharePct = 0;
       state.biz.peakMult = 1;
     }
-    collectForm();
+    if (scenario === 'private') {
+      state.sensitivity.priceMin = 5;
+      state.sensitivity.priceMax = 50;
+      state.sensitivity.priceStep = 5;
+    } else if (scenario === 'premium' || scenario === 'official' || scenario === 'hybrid') {
+      state.sensitivity.priceMin = 0.5;
+      state.sensitivity.priceMax = 8;
+      state.sensitivity.priceStep = 0.5;
+    }
     populateForm();
     renderAll();
   }
 
+  // ---------- 渲染 ----------
+
   function renderAll() {
     collectForm();
     saveState();
+    renderMiniSummary();
     renderCapacity();
     renderProfit();
     renderSensitivity();
+    updateOfficialHint();
   }
 
   function kpi(label, value, cls = '', sub = '') {
     return `<div class="kpi"><div class="label">${label}</div><div class="value ${cls}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  }
+
+  function renderMiniSummary() {
+    const r = calcResults(state);
+    const modeLabel = { official: '官方价转售/自用', premium: '溢价转售', private: '私有化部署', hybrid: '混合策略' }[state.biz.mode];
+    const be = r.breakEvenUtil !== null
+      ? (r.breakEvenUtil > 100 ? '>100%（不可达）' : fmtNum(r.breakEvenUtil, 0) + '%')
+      : (state.biz.mode === 'private' ? '—' : '不可达');
+    const profitCls = r.profitPerM >= 0 ? 'good' : 'bad';
+    $('mini-summary').innerHTML = `
+      <div class="ms-item"><span class="ms-label">方案</span><span class="ms-value">${state.model.shortName || state.model.name} · ${state.gpu.name} ×${state.nodes} 节点 · ${modeLabel}</span></div>
+      <div class="ms-item"><span class="ms-label">月毛利</span><span class="ms-value ${profitCls}">${fmtMoney(r.profitPerM, true)}</span></div>
+      <div class="ms-item"><span class="ms-label">盈亏平衡负载率</span><span class="ms-value">${be}</span></div>
+      <div class="ms-item"><span class="ms-label">输出 token/h</span><span class="ms-value">${fmtTok(r.outTokH)}</span></div>
+      <div class="ms-item"><span class="ms-label">每百万输出成本</span><span class="ms-value">${r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut)}</span></div>
+      <button class="btn small" id="mini-goto-profit">查看收益 →</button>`;
+    $('mini-goto-profit').addEventListener('click', () => switchTab('profit'));
   }
 
   function renderCapacity() {
@@ -280,13 +330,13 @@ const App = (() => {
     const n = r.node;
     const outTokHPerNode = n.nodeDecode * 3600;
     const inTokHPerNode = Math.min(outTokHPerNode * state.model.inputOutputRatio, n.nodePrefill * 3600);
-    const sym = currencySymbol();
 
     const warns = [];
-    if (!n.fits) warns.push(`模型权重 + 预留显存（${fmtNum(n.weightGB + state.opt.reserveGB, 0)}GB）超出节点总显存（${fmtNum(n.hbmTotal, 0)}GB），当前配置无法加载。请减少显存开销、使用更低位量化或换更大显存 GPU。`);
+    if (!n.fits) warns.push(`模型权重 + 预留显存（${fmtNum(n.weightGB + state.opt.reserveGB, 0)}GB）超出节点总显存（${fmtNum(n.hbmTotal, 0)}GB），当前配置无法加载。请减少显存开销、使用更低量化或换更大显存 GPU。`);
     if (n.hbmCap === 0 && n.fits) warns.push('KV 容量上限为 0：显存几乎被权重占满，长上下文并发能力极低。');
     if (!state.opt.dsparkOn) warns.push('DSpark 已关闭：官方实测单流提速 60–85%，开启后产能与并发收益会显著提升。');
     if (state.opt.kvPoolOn && state.opt.cacheHitPct < 20) warns.push('缓存命中率设置较低（<20%）：Agent/多轮场景通常可到 60–90%，建议结合实际流量回放修正。');
+    if (state.opt.pdSplitOn) warns.push('已启用 PD 分离：解码吞吐按配置增益放大（默认 +15%），该收益依赖调度器与网络，实际以压测为准。');
     $('capacity-warning').innerHTML = warns.map(w => `<div class="warning-box">${w}</div>`).join('');
 
     $('capacity-kpis').innerHTML =
@@ -295,25 +345,20 @@ const App = (() => {
       kpi('单请求 KV 缓存', fmtNum(n.kvMBPerReq, 2) + ' MB', '',
         `平均上下文 ${fmtNum(n.ctxLen, 0)} token`) +
       kpi('解码吞吐（DSpark）', fmtNum(n.nodeDecode, 0) + ' tok/s', 'good',
-        `未优化 ${fmtNum(n.nodeDecodeNoDspark, 0)} tok/s · ×${state.opt.dsparkOn ? state.opt.dsparkSpeedup : 1}`) +
-      kpi('输出 token / 小时', fmtTok(outTokHPerNode), 'good',
-        `满负载理论值（单节点）`) +
-      kpi('输入 token / 小时', fmtTok(inTokHPerNode), '',
-        `受预填充能力上限约束`) +
-      kpi('达到满吞吐所需并发', fmtNum(n.requiredConcurrency, 0) + ' 路', 'warn',
-        `单流 ${fmtNum(state.opt.singleStreamTps, 0)} tok/s`) +
-      kpi('KV 容量并发上限', fmtNum(n.kvCapTotal, 0) + ' 路', '',
-        `HBM ${fmtNum(n.hbmCap, 0)} + 卸载池 ${fmtNum(n.offloadCap, 0)}`) +
-      kpi('每小时最大收入', fmtMoney(r.revenuePerH * (state.nodes / Math.max(r.apiNodes, 1)), true), '',
-        `当前价格与负载（单节点口径）`);
+        `未优化 ${fmtNum(n.nodeDecodeNoDspark, 0)} tok/s` + (state.opt.pdSplitOn ? ` · PD ×${n.pdFactor.toFixed(2)}` : '')) +
+      kpi('输出 token / 小时', fmtTok(outTokHPerNode), 'good', '满负载理论值（单节点）') +
+      kpi('输入 token / 小时', fmtTok(inTokHPerNode), '', '受预填充能力上限约束') +
+      kpi('达到满吞吐所需并发', fmtNum(n.requiredConcurrency, 0) + ' 路', 'warn', `单流 ${fmtNum(state.opt.singleStreamTps, 0)} tok/s`) +
+      kpi('KV 容量并发上限', fmtNum(n.kvCapTotal, 0) + ' 路', '', `HBM ${fmtNum(n.hbmCap, 0)} + 卸载池 ${fmtNum(n.offloadCap, 0)}`) +
+      kpi('单节点当前收入/h', fmtMoney(r.revPerHPerNode, true), '', `满负载时可达 ${fmtMoney(r.maxRevPerHPerApiNode, true)}/h`);
 
     const rows = [
-      ['单卡带宽（TB/s）', fmtNum(state.gpu.bandwidthGBps, 2)],
+      ['单卡带宽（TB/s）', fmtNum(state.gpu.bandwidthTBps, 2)],
       ['每 token 读取字节', fmtNum(n.activeBytes / 1e9 + n.kvBytesPerReq / 1e9, 2) + ' GB',
         `激活权重 ${fmtNum(n.activeBytes / 1e9, 1)} GB + KV ${fmtNum(n.kvBytesPerReq / 1e6, 1)} MB`],
       ['单卡理论解码（100% 带宽）', fmtNum(n.basePerGpu, 0) + ' tok/s'],
       ['单卡有效解码（含利用率）', fmtNum(n.effPerGpu, 0) + ' tok/s'],
-      ['单节点解码（含 DSpark）', fmtNum(n.nodeDecode, 0) + ' tok/s'],
+      ['单节点解码（含优化）', fmtNum(n.nodeDecode, 0) + ' tok/s'],
       ['单节点预填充', fmtNum(n.nodePrefill, 0) + ' tok/s'],
       ['单节点满负载输出 token/h', fmtTok(outTokHPerNode)],
       ['单节点满负载输入 token/h', fmtTok(inTokHPerNode)],
@@ -333,7 +378,6 @@ const App = (() => {
 
   function renderProfit() {
     const r = calcResults(state);
-    const sym = currencySymbol();
     const warns = [];
     if (r.inCapped) warns.push('输入侧需求超过预填充能力上限，输入 token 已按预填充上限截断；实际长输入负载下输入收入可能低于模型估算。');
     if (r.apiNodes > 0 && r.breakEvenUtil === null) warns.push('当前定价与成本结构下无法实现盈亏平衡（收入斜率 < 可变成本斜率），建议提价或降本。');
@@ -349,26 +393,47 @@ const App = (() => {
       kpi('月毛利', fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
         `每小时 ${fmtMoney(r.revenuePerH - r.cost.total / 730, true)}`) +
       kpi('毛利率', r.margin === null ? '—' : fmtNum(r.margin, 1) + '%', r.margin !== null && r.margin >= 0 ? 'good' : 'bad') +
-      kpi('盈亏平衡负载率', r.breakEvenUtil === null ? '不可达' : fmtNum(r.breakEvenUtil, 0) + '%', r.breakEvenUtil !== null && r.breakEvenUtil <= 100 ? 'good' : 'warn') +
+      kpi('盈亏平衡负载率', r.breakEvenUtil === null ? (state.biz.mode === 'private' ? '—' : '不可达') : fmtNum(r.breakEvenUtil, 0) + '%',
+        r.breakEvenUtil !== null && r.breakEvenUtil <= 100 ? 'good' : 'warn') +
       kpi('盈亏平衡输出价', r.breakEvenPrice === null ? '—' : fmtMoney(r.breakEvenPrice, false), '',
         `当前负载 ${fmtNum(state.biz.utilizationPct, 0)}%）`) +
-      kpi('采购回本周期', r.paybackMonths === null ? '—' : fmtNum(r.paybackMonths, 1) + ' 个月', r.paybackMonths !== null && r.paybackMonths <= 36 ? 'good' : 'warn',
-        state.cost.rentMode === 'buy' ? '按当前月毛利' : '当前为租用模式') +
-      kpi('输出 token / 月', fmtTok(r.outTokM), '', `输入 ${fmtTok(r.inTokM)} · 命中率 ${state.opt.kvPoolOn ? state.opt.cacheHitPct : 0}%`);
+      kpi('合同盈亏平衡价', r.breakEvenContract === null ? '—' : fmtMoney(r.breakEvenContract, false), '',
+        '私有化节点口径（月/节点）') +
+      kpi('每百万输出 token 成本', r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut), '',
+        r.revPerMOut === null ? '' : `当前单价 ${fmtMoney(r.revPerMOut)}/M`) +
+      kpi('输出 token / 月', fmtTok(r.outTokM), '', `输入 ${fmtTok(r.inTokM)} · 可计费 ${fmtTok(r.billableTokM)}`) +
+      kpi('采购回本周期', r.paybackMonths === null ? '—' : fmtNum(r.paybackMonths, 1) + ' 个月',
+        r.paybackMonths !== null && r.paybackMonths <= 36 ? 'good' : 'warn',
+        state.cost.rentMode === 'buy' ? '按当前月毛利' : '当前为租用模式');
+
+    const rb = rentBuyCompare(state, state.cost.amortMonths);
+    $('rent-buy-wrap').innerHTML = `
+      <table>
+        <thead><tr><th>方式</th><th>${rb.months} 个月总成本</th><th>月均成本</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>租用</td><td>${fmtMoney(rb.rentTotal, true)}</td><td>${fmtMoney(rb.rentMonthly, true)}</td><td>含电费与运维，按当前折扣 ${fmtNum(state.gpu.reservedDiscountPct, 0)}% 计算</td></tr>
+          <tr><td>采购</td><td>${fmtMoney(rb.buyTotal, true)}</td><td>${fmtMoney(rb.buyMonthly, true)}</td><td>一次采购 + 维护/电费/运维，不含残值</td></tr>
+        </tbody>
+      </table>
+      <p class="muted small">${rb.buySaving > 0
+        ? `按 ${rb.months} 个月口径，采购比租用省 ${fmtMoney(rb.buySaving, true)}（${fmtNum(rb.buySaving / Math.max(rb.rentTotal, 1) * 100, 0)}%）。`
+        : `按 ${rb.months} 个月口径，租用比采购省 ${fmtMoney(-rb.buySaving, true)}，短期租用更划算。`}</p>`;
 
     Charts.mount('chart-cost', Charts.costOption(r.cost, state.currency));
-    Charts.mount('chart-profit-curve', Charts.profitCurveOption(profitCurve(state), state.currency));
+    Charts.mount('chart-profit-curve', Charts.profitCurveOption(profitCurve(state), state.currency, r.breakEvenUtil));
 
     const cmp = compareGpus(state);
     $('gpu-compare').innerHTML =
-      '<table><thead><tr><th>GPU</th><th>解码 tok/s</th><th>输出 tok/h</th><th>月收入</th><th>月成本</th><th>月毛利</th><th>盈亏平衡负载率</th><th>可部署</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>GPU</th><th>解码 tok/s</th><th>输出 tok/h</th><th>可计费 tok/h</th><th>月收入</th><th>月成本</th><th>月毛利</th><th>每节点月毛利</th><th>盈亏平衡负载率</th><th>可部署</th></tr></thead><tbody>' +
       cmp.map(c => `<tr>
         <td>${c.name}</td>
         <td>${fmtNum(c.decodeTps, 0)}</td>
         <td>${fmtTok(c.outTokH)}</td>
+        <td>${fmtTok(c.billableTokH)}</td>
         <td>${fmtMoney(c.revPerM, true)}</td>
         <td>${fmtMoney(c.costPerM, true)}</td>
         <td class="${c.profitPerM >= 0 ? 'num-good' : 'num-bad'}">${fmtMoney(c.profitPerM, true)}</td>
+        <td class="${c.profitPerNode >= 0 ? 'num-good' : 'num-bad'}">${fmtMoney(c.profitPerNode, true)}</td>
         <td>${c.breakEvenUtil === null ? '—' : fmtNum(c.breakEvenUtil, 0) + '%'}</td>
         <td>${c.fits ? '✅' : '❌ 显存不足'}</td>
       </tr>`).join('') + '</tbody></table>';
@@ -400,7 +465,17 @@ const App = (() => {
       matrix.usages.map((u, i) => `<tr><th>${fmtNum(u, 0)}%</th>${matrix.rows[i].map(cell).join('')}</tr>`).join('') +
       '</tbody></table>';
 
-    Charts.mount('chart-tornado', Charts.tornadoOption(tornadoItems, state.currency));
+    Charts.mount('chart-tornado', Charts.tornadoOption(tornadoItems, state.currency, state.sensitivity.tornadoPct));
+  }
+
+  function updateOfficialHint() {
+    const pricing = OFFICIAL_PRICING[state.modelKey] || OFFICIAL_PRICING['v4-flash'];
+    const rate = CURRENCY_RATE[state.currency] || 1;
+    const f = v => round2(v / 7.2 * rate);
+    const p = pricing.offpeak;
+    $('biz-note').textContent =
+      `官方参考价（${state.modelKey === 'v4-pro' || state.modelKey === 'v4-pro-fp4' ? 'V4-Pro' : 'V4-Flash'}，2026-08-16 起）：` +
+      `输入 ${fmtMoney(f(p.in))}/M，输出 ${fmtMoney(f(p.out))}/M，缓存命中 ${fmtMoney(f(p.cached))}/M；高峰 = ×${pricing.peakMult}。`;
   }
 
   function renderSources() {
@@ -408,6 +483,8 @@ const App = (() => {
       `<li>${s.name}（${s.date}）<br><a href="${s.url}" target="_blank" rel="noopener">${s.url}</a></li>`
     ).join('');
   }
+
+  // ---------- 导入导出 / 分享 / 打印 ----------
 
   function exportConfig() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -427,27 +504,80 @@ const App = (() => {
         state = Object.assign(defaultState(), parsed);
         populateForm();
         renderAll();
-        alert('配置已导入');
+        toast('配置已导入');
       } catch (e) {
-        alert('配置文件无效：' + e.message);
+        toast('配置文件无效：' + e.message, true);
       }
     };
     reader.readAsText(file);
   }
 
+  function shareLink() {
+    const url = location.href.split('#')[0] + '#' + encodeState();
+    const done = () => toast('链接已复制，打开即可恢复当前方案');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, () => fallbackCopy(url, done));
+    } else {
+      fallbackCopy(url, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动复制地址栏链接', true); }
+    document.body.removeChild(ta);
+  }
+
+  let toastTimer = null;
+  function toast(msg, isError = false) {
+    let el = $('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = 'toast show' + (isError ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  function printReport() {
+    const after = () => {
+      document.body.classList.remove('printing');
+      const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'setup';
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + activeTab));
+      setTimeout(() => Charts.resizeAll(), 60);
+    };
+    document.body.classList.add('printing');
+    document.querySelectorAll('details').forEach(d => d.setAttribute('open', ''));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('active'));
+    setTimeout(() => Charts.resizeAll(), 60);
+    window.addEventListener('afterprint', after, { once: true });
+    window.print();
+    setTimeout(after, 1200); // 部分浏览器不触发 afterprint 时兜底
+  }
+
+  // ---------- 标签页 ----------
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    setTimeout(() => Charts.resizeAll(), 80);
+  }
+
   function initTabs() {
     document.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        $('panel-' + btn.dataset.tab).classList.add('active');
-        setTimeout(() => {
-          Object.keys(echarts || {}).length && Object.values(Charts).forEach(() => {});
-        }, 50);
-      });
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
   }
+
+  // ---------- 初始化 ----------
 
   function init() {
     if (!window.echarts) {
@@ -477,8 +607,21 @@ const App = (() => {
 
     $('gpu-key').addEventListener('change', e => {
       applyGpuPreset(state, e.target.value);
+      state.cost.coloPerNodeMonth = round2(state.gpu.coloPerNodeMonth * (CURRENCY_RATE[state.currency] / CURRENCY_RATE.USD));
       populateForm();
       renderAll();
+    });
+
+    $('biz-mode').addEventListener('change', () => {
+      if ($('biz-mode').value === 'private') {
+        $('sens-price-min').value = 5;
+        $('sens-price-max').value = 50;
+        $('sens-price-step').value = 5;
+      } else {
+        $('sens-price-min').value = 0.5;
+        $('sens-price-max').value = 8;
+        $('sens-price-step').value = 0.5;
+      }
     });
 
     document.querySelectorAll('#panel-setup input, #panel-setup select').forEach(el => {
@@ -496,6 +639,8 @@ const App = (() => {
       if (e.target.files[0]) importConfig(e.target.files[0]);
       e.target.value = '';
     });
+    $('btn-share').addEventListener('click', shareLink);
+    $('btn-print').addEventListener('click', printReport);
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn ghost';
@@ -504,6 +649,7 @@ const App = (() => {
       state = defaultState();
       populateForm();
       renderAll();
+      toast('已恢复默认参数');
     });
     document.querySelector('.header-actions').appendChild(resetBtn);
 

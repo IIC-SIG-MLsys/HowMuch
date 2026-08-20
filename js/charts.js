@@ -16,10 +16,13 @@ const Charts = (() => {
     }
     if (!instances[elId]) {
       instances[elId] = echarts.init(el, null, { renderer: 'canvas' });
-      window.addEventListener('resize', () => instances[elId] && instances[elId].resize());
     }
     instances[elId].setOption(option, true);
     return instances[elId];
+  }
+
+  function resizeAll() {
+    Object.values(instances).forEach(chart => chart.resize());
   }
 
   const base = {
@@ -83,7 +86,18 @@ const Charts = (() => {
     };
   }
 
-  function profitCurveOption(curve, currency) {
+  function profitCurveOption(curve, currency, breakEvenUtil) {
+    const markLineData = [];
+    if (breakEvenUtil !== null && breakEvenUtil >= 0 && breakEvenUtil <= 110) {
+      const idx = curve.findIndex(c => c.u >= breakEvenUtil);
+      if (idx >= 0) {
+        markLineData.push({
+          xAxis: idx,
+          label: { formatter: `盈亏平衡 ${Math.round(breakEvenUtil)}%`, color: '#fbbf24' },
+          lineStyle: { color: '#fbbf24', type: 'dashed' }
+        });
+      }
+    }
     return {
       ...base,
       legend: { top: 0, textStyle: { color: '#93a1c4' } },
@@ -96,12 +110,16 @@ const Charts = (() => {
       series: [
         { name: '收入', type: 'line', smooth: true, data: curve.map(c => c.revenue), itemStyle: { color: '#22d3ee' }, areaStyle: { color: 'rgba(34,211,238,.08)' } },
         { name: '成本', type: 'line', smooth: true, data: curve.map(c => c.cost), itemStyle: { color: '#f87171' } },
-        { name: '毛利', type: 'line', smooth: true, data: curve.map(c => c.profit), itemStyle: { color: '#34d399' }, areaStyle: { color: 'rgba(52,211,153,.08)' } }
+        {
+          name: '毛利', type: 'line', smooth: true, data: curve.map(c => c.profit),
+          itemStyle: { color: '#34d399' }, areaStyle: { color: 'rgba(52,211,153,.08)' },
+          markLine: { symbol: 'none', data: markLineData }
+        }
       ]
     };
   }
 
-  function tornadoOption(items, currency) {
+  function tornadoOption(items, currency, pct) {
     const names = items.map(i => i.label);
     return {
       ...base,
@@ -111,10 +129,10 @@ const Charts = (() => {
         formatter: ps => {
           const idx = ps[0].dataIndex;
           const it = items[idx];
-          return `${it.label}<br>−20%: ${money(it.down, currency, true)}<br>+20%: ${money(it.up, currency, true)}`;
+          return `${it.label}<br>−${pct}%: ${money(it.down, currency, true)}<br>+${pct}%: ${money(it.up, currency, true)}`;
         }
       },
-      grid: { left: 120, right: 70, top: 20, bottom: 30 },
+      grid: { left: 130, right: 70, top: 20, bottom: 30 },
       xAxis: {
         type: 'value',
         axisLabel: { color: '#93a1c4', formatter: v => money(v, currency, true) }
@@ -151,12 +169,14 @@ const Charts = (() => {
     const sym = currency === 'CNY' ? '¥' : '$';
     if (compact && Math.abs(v) >= 1e6) return sym + (v / 1e6).toFixed(1) + 'M';
     if (compact && Math.abs(v) >= 1e4) return sym + (v / 1e3).toFixed(1) + 'k';
+    if (compact && Math.abs(v) >= 1000) return sym + (v / 1e3).toFixed(2) + 'k';
     return sym + Math.round(v).toLocaleString();
   }
 
   return {
     available,
     mount,
+    resizeAll,
     throughputOption,
     costOption,
     profitCurveOption,

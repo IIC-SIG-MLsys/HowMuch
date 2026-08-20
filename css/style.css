@@ -119,6 +119,32 @@ main { padding: 24px 0 48px; }
 }
 
 .chip:hover { border-color: var(--accent); color: var(--accent-2); }
+.chip.active {
+  border-color: var(--accent);
+  color: #fff;
+  background: linear-gradient(90deg, rgba(109,141,255,.28), rgba(34,211,238,.2));
+}
+
+.mini-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: linear-gradient(90deg, rgba(109,141,255,.12), rgba(34,211,238,.08));
+  border: 1px solid rgba(109,141,255,.35);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+
+.ms-item { display: flex; flex-direction: column; gap: 1px; min-width: 90px; }
+.ms-label { color: var(--muted); font-size: 11px; }
+.ms-value { font-weight: 700; }
+.ms-value.good { color: var(--good); }
+.ms-value.bad { color: var(--bad); }
+
+.btn.small { padding: 6px 12px; font-size: 12px; }
 
 .card-grid {
   display: grid;
@@ -284,9 +310,49 @@ tr:hover td { background: rgba(109,141,255,.05); }
 #heatmap-wrap table td { min-width: 72px; }
 #heatmap-wrap th:first-child { min-width: 110px; }
 
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--card-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all .25s ease;
+  z-index: 99;
+  box-shadow: var(--shadow);
+}
+
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { border-color: var(--bad); }
+
+@media print {
+  body { background: #fff; color: #111; }
+  .site-header { position: static; background: #fff; border-bottom: 1px solid #ccc; }
+  h1 { -webkit-text-fill-color: #111; color: #111; }
+  .subtitle, .muted, .small { color: #444; }
+  .tabbar, .header-actions, .scenario-bar, .mini-summary, .site-footer, .btn { display: none !important; }
+  .tab-panel { display: block !important; }
+  .card { background: #fff; border: 1px solid #ccc; box-shadow: none; break-inside: avoid; }
+  .card h2 { color: #111; }
+  th { background: #eee; color: #111; }
+  td { color: #111; }
+  .warning-box { border-color: #bbb; background: #fafafa; color: #333; }
+  .kpi { border-color: #ccc; }
+  .kpi .label, .kpi .sub { color: #444; }
+  .chart { height: 260px; }
+  details summary { color: #111; }
+}
+
 @media (max-width: 720px) {
   .header-inner { flex-direction: column; align-items: flex-start; }
   .card-grid.two { grid-template-columns: 1fr; }
   .kpi .value { font-size: 20px; }
   h1 { font-size: 21px; }
+  .mini-summary { align-items: flex-start; }
 }

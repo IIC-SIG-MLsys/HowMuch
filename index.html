@@ -20,6 +20,8 @@
           <option value="USD">USD $</option>
           <option value="CNY">CNY ¥</option>
         </select>
+        <button id="btn-share" class="btn ghost">分享链接</button>
+        <button id="btn-print" class="btn ghost">打印报告</button>
         <button id="btn-export" class="btn ghost">导出配置</button>
         <button id="btn-import" class="btn ghost">导入配置</button>
         <input type="file" id="import-file" accept="application/json" hidden>
@@ -44,6 +46,7 @@
         <button class="chip" data-scenario="private">私有化部署</button>
         <button class="chip" data-scenario="hybrid">混合策略</button>
       </div>
+      <div id="mini-summary" class="mini-summary"></div>
 
       <div class="card-grid">
         <div class="card">
@@ -54,7 +57,9 @@
                 <span>模型预设</span>
                 <select id="model-key">
                   <option value="v4-flash">DeepSeek-V4-Flash（284B / 13B 激活）</option>
+                  <option value="v4-flash-fp4">DeepSeek-V4-Flash（FP4+FP8 混合，~146GB）</option>
                   <option value="v4-pro">DeepSeek-V4-Pro（1.6T / 49B 激活）</option>
+                  <option value="v4-pro-fp4">DeepSeek-V4-Pro（FP4+FP8 混合）</option>
                   <option value="custom">自定义模型</option>
                 </select>
               </label>
@@ -190,6 +195,13 @@
                 <span>预填充效率（%）</span>
                 <input type="number" id="opt-prefill-eff" min="1" max="100" step="1">
               </label>
+              <label class="field check">
+                <input type="checkbox" id="opt-pd"> <span>启用 PD 分离（Mooncake 式）</span>
+              </label>
+              <label class="field">
+                <span>PD 分离解码增益（%）</span>
+                <input type="number" id="opt-pd-gain" min="0" max="100" step="1">
+              </label>
               <label class="field">
                 <span>显存预留（GB/节点）</span>
                 <input type="number" id="opt-reserve" min="0" step="1">
@@ -244,7 +256,7 @@
                 <span>私有化合同价（/节点/月）</span>
                 <input type="number" id="biz-contract" min="0" step="100">
               </label>
-              <p class="field-note full">官方价已内置 2026-08-16 峰谷分时方案；选择“官方价转售”后自动填充，并可通过高峰占比模拟时段结构。</p>
+              <p class="field-note full" id="biz-note">官方参考价：选择模型后自动显示 2026-08-16 峰谷分时方案。</p>
             </div>
           </details>
         </div>
@@ -323,6 +335,10 @@
     <section class="tab-panel" id="panel-profit">
       <div id="profit-warning"></div>
       <div class="kpi-grid" id="profit-kpis"></div>
+      <div class="card">
+        <h2>租 vs 买（总成本对比）</h2>
+        <div id="rent-buy-wrap" class="table-wrap"></div>
+      </div>
       <div class="card-grid two">
         <div class="card">
           <h2>月度成本结构</h2>
@@ -390,8 +406,5 @@
   <script src="js/engine.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/engine-fix.js"></script>
-  <script src="js/ui-fix.js"></script>
-  <script src="js/final-fix.js"></script>
 </body>
 </html>
