@@ -17,22 +17,24 @@
         <h1 data-i18n="app.title">AI 部署成本计算器</h1>
         <p class="subtitle" data-i18n="app.subtitle">租 / 买服务器部署生产级大模型：吞吐、成本与盈利空间的交互式测算</p>
       </div>
-      <div class="header-tools">
-        <div class="lang-toggle" role="group" aria-label="Language">
-          <button type="button" class="lang-btn active" data-lang="zh" data-i18n="lang.zh">中文</button>
-          <button type="button" class="lang-btn" data-lang="en" data-i18n="lang.en">EN</button>
+      <div class="header-side">
+        <div class="header-tools">
+          <div class="lang-toggle" role="group" aria-label="Language">
+            <button type="button" class="lang-btn active" data-lang="zh" data-i18n="lang.zh">中文</button>
+            <button type="button" class="lang-btn" data-lang="en" data-i18n="lang.en">EN</button>
+          </div>
+          <button type="button" id="currency-btn" class="currency-btn" title="Switch currency" aria-label="Switch currency">$ USD</button>
         </div>
-        <button type="button" id="currency-btn" class="currency-btn" title="Switch currency" aria-label="Switch currency">$ USD</button>
+        <div class="header-actions">
+          <button id="btn-copy" class="btn ghost small" data-i18n="btn.copy">复制摘要</button>
+          <button id="btn-share" class="btn ghost small" data-i18n="btn.share">分享链接</button>
+          <button id="btn-print" class="btn ghost small" data-i18n="btn.print">打印报告</button>
+          <span class="action-sep" aria-hidden="true"></span>
+          <button id="btn-export" class="btn ghost small" data-i18n="btn.export">导出配置</button>
+          <button id="btn-import" class="btn ghost small" data-i18n="btn.import">导入配置</button>
+          <input type="file" id="import-file" accept="application/json" hidden>
+        </div>
       </div>
-    </div>
-    <div class="container header-actions">
-      <button id="btn-copy" class="btn ghost small" data-i18n="btn.copy">复制摘要</button>
-      <button id="btn-share" class="btn ghost small" data-i18n="btn.share">分享链接</button>
-      <button id="btn-print" class="btn ghost small" data-i18n="btn.print">打印报告</button>
-      <span class="action-sep" aria-hidden="true"></span>
-      <button id="btn-export" class="btn ghost small" data-i18n="btn.export">导出配置</button>
-      <button id="btn-import" class="btn ghost small" data-i18n="btn.import">导入配置</button>
-      <input type="file" id="import-file" accept="application/json" hidden>
     </div>
     <nav class="tabbar container" aria-label="Sections">
       <button class="tab active" data-tab="setup" data-i18n="tab.setup">① 参数设置</button>
