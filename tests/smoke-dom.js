@@ -46,7 +46,7 @@ window.addEventListener('load', () => {
       ok(d.querySelector('#profit-kpis').innerHTML.length > 200, 'profit KPIs rendered');
       ok(d.querySelector('#mini-summary').textContent.includes('月毛利'), 'mini summary rendered');
       ok(d.querySelector('main').className === '', 'main no longer has container class (padding override bug)');
-      ok(css.includes('padding: 80px 20px 48px'), 'main top padding rule present');
+      ok(css.includes('padding: 48px 20px 48px'), 'main top padding rule present');
       ok(d.querySelectorAll('#heatmap-wrap table tr').length >= 3, 'heatmap table rendered');
       ok(d.querySelector('#rent-buy-wrap').textContent.includes('采购'), 'rent-buy compare rendered');
       ok(d.querySelector('#unit-econ').textContent.includes('每百万输出 token 成本'), 'unit economics rendered');
