@@ -87,6 +87,24 @@ window.addEventListener('load', () => {
       ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
       ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
 
+      ok(d.querySelectorAll('#assumptions-wrap table tr').length >= 6, 'assumptions table rendered');
+      ok(!d.querySelector('.site-footer').textContent.includes('GitHub Pages'), 'footer sentence removed');
+
+      d.querySelector('[data-reliability="optimistic"]').click();
+      ok(parseFloat(d.getElementById('opt-bwutil').value) === 60, 'optimistic scenario sets BW util 60%');
+      ok(Math.abs(parseFloat(d.getElementById('opt-dspark-speedup').value) - 1.85) < 1e-6, 'optimistic scenario sets DSpark 1.85');
+
+      ok(d.getElementById('biz-mode-desc').textContent.length > 10, 'mode description rendered');
+
+      d.querySelector('[data-lang="en"]').click();
+      ok(d.getElementById('btn-copy').textContent === 'Copy summary', 'English static text applied');
+      ok(d.querySelector('#mini-summary').textContent.includes('Monthly profit'), 'English dynamic text applied');
+      ok(d.querySelector('#assumptions-wrap').textContent.includes('Parameter'), 'English assumptions applied');
+
+      d.querySelector('[data-lang="zh"]').click();
+      ok(d.getElementById('btn-copy').textContent === '复制摘要', 'Chinese static text restored');
+      ok(d.querySelector('#mini-summary').textContent.includes('月毛利'), 'Chinese dynamic text restored');
+
       ok(errors.length === 0, 'no uncaught errors: ' + errors.join(' | '));
       console.log('\nDOM smoke test passed.');
     } catch (e) {

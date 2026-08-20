@@ -2,6 +2,7 @@
 
 const Charts = (() => {
   const instances = {};
+  const T = key => I18N.t(key);
 
   function available() {
     return typeof echarts !== 'undefined';
@@ -11,7 +12,7 @@ const Charts = (() => {
     const el = document.getElementById(elId);
     if (!el) return null;
     if (!available()) {
-      el.innerHTML = '<div class="warning-box">图表库未加载（需联网或检查 vendor/echarts.min.js），其余计算不受影响。</div>';
+      el.innerHTML = '<div class="warning-box">Chart library unavailable — tables & calculations still work.</div>';
       return null;
     }
     if (!instances[elId]) {
@@ -35,7 +36,7 @@ const Charts = (() => {
     return {
       ...base,
       tooltip: { ...base.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { left: 70, right: 24, top: 30, bottom: 40 },
+      grid: { left: 130, right: 36, top: 30, bottom: 40, containLabel: true },
       xAxis: {
         type: 'value',
         name: 'tok/s',
@@ -44,8 +45,8 @@ const Charts = (() => {
       },
       yAxis: {
         type: 'category',
-        data: ['预填充（输入）', '解码-未优化', '解码-DSpark'],
-        axisLabel: { color: '#c7d2f0' }
+        data: [T('chart.prefill'), T('chart.decodeBase'), T('chart.decodeDspark')],
+        axisLabel: { color: '#c7d2f0', width: 120, overflow: 'truncate' }
       },
       series: [{
         type: 'bar',
@@ -62,11 +63,11 @@ const Charts = (() => {
 
   function costOption(cost, currency) {
     const items = [
-      ['租金', cost.rent],
-      ['折旧', cost.amort],
-      ['维护', cost.maint],
-      ['电费', cost.power],
-      ['机房/运维', cost.ops]
+      [T('chart.rent'), cost.rent],
+      [T('chart.amort'), cost.amort],
+      [T('chart.maint'), cost.maint],
+      [T('chart.power'), cost.power],
+      [T('chart.ops'), cost.ops]
     ].filter(x => x[1] > 0);
     return {
       ...base,
@@ -75,13 +76,15 @@ const Charts = (() => {
       series: [{
         type: 'pie',
         radius: ['38%', '68%'],
-        center: ['50%', '45%'],
+        center: ['50%', '44%'],
+        avoidLabelOverlap: true,
         data: items.map(([name, value], i) => ({
           name,
           value: Math.round(value),
           itemStyle: { color: ['#6d8dff', '#22d3ee', '#fbbf24', '#34d399', '#f87171'][i % 5] }
         })),
-        label: { color: '#c7d2f0', formatter: '{b}\n{d}%' }
+        label: { color: '#c7d2f0', formatter: '{b}\n{d}%', overflow: 'break' },
+        labelLine: { length: 12, length2: 12 }
       }]
     };
   }
@@ -93,7 +96,7 @@ const Charts = (() => {
       if (idx >= 0) {
         markLineData.push({
           xAxis: idx,
-          label: { formatter: `盈亏平衡 ${Math.round(breakEvenUtil)}%`, color: '#fbbf24' },
+          label: { formatter: T('chart.beMark', { v: Math.round(breakEvenUtil) }), color: '#fbbf24' },
           lineStyle: { color: '#fbbf24', type: 'dashed' }
         });
       }
@@ -101,17 +104,21 @@ const Charts = (() => {
     return {
       ...base,
       legend: { top: 0, textStyle: { color: '#93a1c4' } },
-      grid: { left: 70, right: 70, top: 40, bottom: 40 },
-      xAxis: { type: 'category', data: curve.map(c => c.u + '%'), axisLabel: { color: '#93a1c4' } },
+      grid: { left: 80, right: 80, top: 40, bottom: 40, containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: curve.map(c => c.u + '%'),
+        axisLabel: { color: '#93a1c4', interval: 3 }
+      },
       yAxis: {
         type: 'value',
         axisLabel: { color: '#93a1c4', formatter: v => money(v, currency, true) }
       },
       series: [
-        { name: '收入', type: 'line', smooth: true, data: curve.map(c => c.revenue), itemStyle: { color: '#22d3ee' }, areaStyle: { color: 'rgba(34,211,238,.08)' } },
-        { name: '成本', type: 'line', smooth: true, data: curve.map(c => c.cost), itemStyle: { color: '#f87171' } },
+        { name: T('chart.revenue'), type: 'line', smooth: true, data: curve.map(c => c.revenue), itemStyle: { color: '#22d3ee' }, areaStyle: { color: 'rgba(34,211,238,.08)' } },
+        { name: T('chart.cost'), type: 'line', smooth: true, data: curve.map(c => c.cost), itemStyle: { color: '#f87171' } },
         {
-          name: '毛利', type: 'line', smooth: true, data: curve.map(c => c.profit),
+          name: T('chart.profit'), type: 'line', smooth: true, data: curve.map(c => c.profit),
           itemStyle: { color: '#34d399' }, areaStyle: { color: 'rgba(52,211,153,.08)' },
           markLine: { symbol: 'none', data: markLineData }
         }
@@ -132,15 +139,15 @@ const Charts = (() => {
           return `${it.label}<br>−${pct}%: ${money(it.down, currency, true)}<br>+${pct}%: ${money(it.up, currency, true)}`;
         }
       },
-      grid: { left: 130, right: 70, top: 20, bottom: 30 },
+      grid: { left: 170, right: 90, top: 20, bottom: 30, containLabel: true },
       xAxis: {
         type: 'value',
         axisLabel: { color: '#93a1c4', formatter: v => money(v, currency, true) }
       },
-      yAxis: { type: 'category', data: names, axisLabel: { color: '#c7d2f0' } },
+      yAxis: { type: 'category', data: names, axisLabel: { color: '#c7d2f0', width: 150, overflow: 'truncate' } },
       series: [
         {
-          name: '下降',
+          name: T('chart.down'),
           type: 'bar',
           stack: 't',
           data: items.map(i => Math.min(i.down, 0)),
@@ -148,7 +155,7 @@ const Charts = (() => {
           label: { show: true, position: 'left', color: '#f87171', formatter: p => p.value ? money(p.value, currency, true) : '' }
         },
         {
-          name: '上升',
+          name: T('chart.up'),
           type: 'bar',
           stack: 't',
           data: items.map(i => Math.max(i.up, 0)),
