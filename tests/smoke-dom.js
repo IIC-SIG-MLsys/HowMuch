@@ -55,6 +55,7 @@ window.addEventListener('load', () => {
       d.querySelector('[data-scenario="premium"]').click();
       ok(d.getElementById('biz-mode').value === 'premium', 'premium scenario sets mode');
       ok(Math.abs(parseFloat(d.getElementById('biz-out-price').value) - 3) < 1e-6, 'premium scenario sets USD price 3');
+      ok(d.getElementById('toast').textContent.includes('溢价转售'), 'scenario toast feedback');
 
       d.querySelector('[data-scenario="official"]').click();
       ok(d.getElementById('biz-mode').value === 'official', 'official scenario sets mode');
@@ -88,6 +89,20 @@ window.addEventListener('load', () => {
       ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
       ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
       ok(!!d.getElementById('btn-more'), 'mobile more button exists');
+      ok(!!d.getElementById('btn-expand-all'), 'expand-all button exists');
+      ok(!!d.getElementById('btn-collapse-all'), 'collapse-all button exists');
+      ok(!!d.getElementById('mobile-cta'), 'mobile CTA exists');
+      ok(d.getElementById('mobile-cta-value').textContent !== '—', 'mobile CTA value updated');
+      ok(d.querySelectorAll('#profit-kpis .kpi-group-title').length >= 2, 'profit KPIs grouped');
+      ok(d.querySelectorAll('#capacity-kpis .kpi-group-title').length >= 2, 'capacity KPIs grouped');
+
+      d.getElementById('btn-collapse-all').click();
+      ok(d.querySelectorAll('#panel-setup details[open]').length === 0, 'collapse-all works');
+      d.getElementById('btn-expand-all').click();
+      ok(d.querySelectorAll('#panel-setup details[open]').length >= 5, 'expand-all works');
+
+      d.getElementById('mobile-cta-btn').click();
+      ok(d.getElementById('panel-profit').classList.contains('active'), 'mobile CTA switches to profit tab');
 
       d.getElementById('btn-more').click();
       ok(d.querySelector('.header-side').classList.contains('open'), 'mobile more menu opens');

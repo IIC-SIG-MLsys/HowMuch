@@ -312,6 +312,7 @@ const App = (() => {
     }
     populateForm();
     renderAll();
+    toast(I18N.t('toast.scenario', { name: I18N.t('scenario.' + scenario) }));
   }
 
   function applyReliability(level) {
@@ -336,6 +337,7 @@ const App = (() => {
     collectForm();
     saveState();
     renderMiniSummary();
+    updateMobileCta();
     renderCapacity();
     renderProfit();
     renderSensitivity();
@@ -355,6 +357,10 @@ const App = (() => {
     return `<div class="kpi"><div class="label">${label}</div><div class="value ${cls}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
   }
 
+  function kpiGroup(title, kpis) {
+    return `<div class="kpi-group"><div class="kpi-group-title">${title}</div><div class="kpi-grid">${kpis}</div></div>`;
+  }
+
   function renderMiniSummary() {
     const r = calcResults(state);
     const modeLabel = I18N.t('modeLabel.' + state.biz.mode);
@@ -370,6 +376,15 @@ const App = (() => {
       <div class="ms-item"><span class="ms-label">${I18N.t('mini.costPerM')}</span><span class="ms-value">${r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut)}</span></div>
       <button class="btn small" id="mini-goto-profit">${I18N.t('btn.gotoProfit')}</button>`;
     $('mini-goto-profit').addEventListener('click', () => switchTab('profit'));
+  }
+
+  function updateMobileCta() {
+    const r = calcResults(state);
+    const el = $('mobile-cta-value');
+    if (el) {
+      el.textContent = fmtMoney(r.profitPerM, true);
+      el.className = r.profitPerM >= 0 ? 'good' : 'bad';
+    }
   }
 
   function renderCapacity() {
@@ -390,19 +405,21 @@ const App = (() => {
     $('capacity-warning').innerHTML = warns.map(w => `<div class="warning-box">${w}</div>`).join('');
 
     $('capacity-kpis').innerHTML =
-      kpi(I18N.t('kpi.weight'), fmtNum(n.weightGB, 0) + ' GB', n.fits ? '' : 'bad',
-        I18N.t('kpi.weightSub', { t: fmtNum(n.hbmTotal, 0), f: fmtNum(n.hbmFree, 0) })) +
-      kpi(I18N.t('kpi.kv'), fmtNum(n.kvMBPerReq, 2) + ' MB', '', I18N.t('kpi.kvSub', { v: fmtNum(n.ctxLen, 0) })) +
-      kpi(I18N.t('kpi.decode'), fmtNum(n.nodeDecode, 0) + ' tok/s', 'good',
-        I18N.t('kpi.decodeSub', {
-          v: fmtNum(n.nodeDecodeNoDspark, 0),
-          extra: state.opt.pdSplitOn ? I18N.t('kpi.pdExtra', { f: n.pdFactor.toFixed(2) }) : ''
-        })) +
-      kpi(I18N.t('kpi.outH'), fmtTok(outTokHPerNode), 'good', I18N.t('kpi.outHSub')) +
-      kpi(I18N.t('kpi.inH'), fmtTok(inTokHPerNode), '', I18N.t('kpi.inHSub')) +
-      kpi(I18N.t('kpi.concurrency'), fmtNum(n.requiredConcurrency, 0) + ' ' + I18N.t('unit.concurrent'), 'warn', I18N.t('kpi.concSub', { v: fmtNum(state.opt.singleStreamTps, 0) })) +
-      kpi(I18N.t('kpi.kvCap'), fmtNum(n.kvCapTotal, 0) + ' ' + I18N.t('unit.concurrent'), '', I18N.t('kpi.kvCapSub', { h: fmtNum(n.hbmCap, 0), o: fmtNum(n.offloadCap, 0) })) +
-      kpi(I18N.t('kpi.revH'), fmtMoney(r.revPerHPerNode, true), '', I18N.t('kpi.revHSub', { v: fmtMoney(r.maxRevPerHPerApiNode, true) }));
+      kpiGroup(I18N.t('kpiGroup.throughput'),
+        kpi(I18N.t('kpi.weight'), fmtNum(n.weightGB, 0) + ' GB', n.fits ? '' : 'bad',
+          I18N.t('kpi.weightSub', { t: fmtNum(n.hbmTotal, 0), f: fmtNum(n.hbmFree, 0) })) +
+        kpi(I18N.t('kpi.kv'), fmtNum(n.kvMBPerReq, 2) + ' MB', '', I18N.t('kpi.kvSub', { v: fmtNum(n.ctxLen, 0) })) +
+        kpi(I18N.t('kpi.decode'), fmtNum(n.nodeDecode, 0) + ' tok/s', 'good',
+          I18N.t('kpi.decodeSub', {
+            v: fmtNum(n.nodeDecodeNoDspark, 0),
+            extra: state.opt.pdSplitOn ? I18N.t('kpi.pdExtra', { f: n.pdFactor.toFixed(2) }) : ''
+          })) +
+        kpi(I18N.t('kpi.outH'), fmtTok(outTokHPerNode), 'good', I18N.t('kpi.outHSub')) +
+        kpi(I18N.t('kpi.inH'), fmtTok(inTokHPerNode), '', I18N.t('kpi.inHSub'))) +
+      kpiGroup(I18N.t('kpiGroup.concurrency'),
+        kpi(I18N.t('kpi.concurrency'), fmtNum(n.requiredConcurrency, 0) + ' ' + I18N.t('unit.concurrent'), 'warn', I18N.t('kpi.concSub', { v: fmtNum(state.opt.singleStreamTps, 0) })) +
+        kpi(I18N.t('kpi.kvCap'), fmtNum(n.kvCapTotal, 0) + ' ' + I18N.t('unit.concurrent'), '', I18N.t('kpi.kvCapSub', { h: fmtNum(n.hbmCap, 0), o: fmtNum(n.offloadCap, 0) })) +
+        kpi(I18N.t('kpi.revH'), fmtMoney(r.revPerHPerNode, true), '', I18N.t('kpi.revHSub', { v: fmtMoney(r.maxRevPerHPerApiNode, true) })));
 
     const rows = [
       [I18N.t('detail.bw'), fmtNum(state.gpu.bandwidthTBps, 2)],
@@ -442,26 +459,29 @@ const App = (() => {
     const modeLabel = I18N.t('modeLabel.' + state.biz.mode);
     const profitLabel = state.biz.mode === 'official' ? I18N.t('kpi.profitOfficial') : I18N.t('kpi.profit');
     $('profit-kpis').innerHTML =
-      kpi(I18N.t('kpi.revenue'), fmtMoney(r.revenuePerM, true), '', I18N.t('kpi.revenueSub', { mode: modeLabel, a: r.apiNodes, p: r.privateNodes })) +
-      kpi(I18N.t('kpi.cost'), fmtMoney(r.cost.total, true), '', I18N.t('kpi.costSub', {
-        r: fmtMoney(r.cost.rent + r.cost.amort + r.cost.maint, true),
-        p: fmtMoney(r.cost.power, true),
-        o: fmtMoney(r.cost.ops, true)
-      })) +
-      kpi(profitLabel, fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
-        I18N.t('kpi.profitSub', { v: fmtMoney(r.revenuePerH - r.cost.total / 730, true) })) +
-      kpi(I18N.t('kpi.margin'), r.margin === null ? '—' : fmtNum(r.margin, 1) + '%', r.margin !== null && r.margin >= 0 ? 'good' : 'bad') +
-      kpi(I18N.t('kpi.beUtil'), r.breakEvenUtil === null ? (state.biz.mode === 'private' ? '—' : I18N.t('be.unreachable')) : fmtNum(r.breakEvenUtil, 0) + '%',
-        r.breakEvenUtil !== null && r.breakEvenUtil <= 100 ? 'good' : 'warn') +
-      kpi(I18N.t('kpi.bePrice'), r.breakEvenPrice === null ? '—' : fmtMoney(r.breakEvenPrice, false), '',
-        I18N.t('kpi.bePriceSub', { v: fmtNum(state.biz.utilizationPct, 0) })) +
-      kpi(I18N.t('kpi.beContract'), r.breakEvenContract === null ? '—' : fmtMoney(r.breakEvenContract, false), '', I18N.t('kpi.beContractSub')) +
-      kpi(I18N.t('kpi.costPerM'), r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut), '',
-        r.revPerMOut === null ? '' : I18N.t('kpi.costPerMSub', { v: fmtMoney(r.revPerMOut) })) +
-      kpi(I18N.t('kpi.outM'), fmtTok(r.outTokM), '', I18N.t('kpi.outMSub', { i: fmtTok(r.inTokM), b: fmtTok(r.billableTokM) })) +
-      kpi(I18N.t('kpi.payback'), r.paybackMonths === null ? '—' : fmtNum(r.paybackMonths, 1) + ' ' + I18N.t('unit.months'),
-        r.paybackMonths !== null && r.paybackMonths <= 36 ? 'good' : 'warn',
-        state.cost.rentMode === 'buy' ? I18N.t('kpi.paybackSub') : I18N.t('kpi.paybackSubRent'));
+      kpiGroup(I18N.t('kpiGroup.core'),
+        kpi(I18N.t('kpi.revenue'), fmtMoney(r.revenuePerM, true), '', I18N.t('kpi.revenueSub', { mode: modeLabel, a: r.apiNodes, p: r.privateNodes })) +
+        kpi(I18N.t('kpi.cost'), fmtMoney(r.cost.total, true), '', I18N.t('kpi.costSub', {
+          r: fmtMoney(r.cost.rent + r.cost.amort + r.cost.maint, true),
+          p: fmtMoney(r.cost.power, true),
+          o: fmtMoney(r.cost.ops, true)
+        })) +
+        kpi(profitLabel, fmtMoney(r.profitPerM, true), r.profitPerM >= 0 ? 'good' : 'bad',
+          I18N.t('kpi.profitSub', { v: fmtMoney(r.revenuePerH - r.cost.total / 730, true) })) +
+        kpi(I18N.t('kpi.margin'), r.margin === null ? '—' : fmtNum(r.margin, 1) + '%', r.margin !== null && r.margin >= 0 ? 'good' : 'bad')) +
+      kpiGroup(I18N.t('kpiGroup.be'),
+        kpi(I18N.t('kpi.beUtil'), r.breakEvenUtil === null ? (state.biz.mode === 'private' ? '—' : I18N.t('be.unreachable')) : fmtNum(r.breakEvenUtil, 0) + '%',
+          r.breakEvenUtil !== null && r.breakEvenUtil <= 100 ? 'good' : 'warn') +
+        kpi(I18N.t('kpi.bePrice'), r.breakEvenPrice === null ? '—' : fmtMoney(r.breakEvenPrice, false), '',
+          I18N.t('kpi.bePriceSub', { v: fmtNum(state.biz.utilizationPct, 0) })) +
+        kpi(I18N.t('kpi.beContract'), r.breakEvenContract === null ? '—' : fmtMoney(r.breakEvenContract, false), '', I18N.t('kpi.beContractSub')) +
+        kpi(I18N.t('kpi.costPerM'), r.costPerMOut === null ? '—' : fmtMoney(r.costPerMOut), '',
+          r.revPerMOut === null ? '' : I18N.t('kpi.costPerMSub', { v: fmtMoney(r.revPerMOut) }))) +
+      kpiGroup(I18N.t('kpiGroup.capacity'),
+        kpi(I18N.t('kpi.outM'), fmtTok(r.outTokM), '', I18N.t('kpi.outMSub', { i: fmtTok(r.inTokM), b: fmtTok(r.billableTokM) })) +
+        kpi(I18N.t('kpi.payback'), r.paybackMonths === null ? '—' : fmtNum(r.paybackMonths, 1) + ' ' + I18N.t('unit.months'),
+          r.paybackMonths !== null && r.paybackMonths <= 36 ? 'good' : 'warn',
+          state.cost.rentMode === 'buy' ? I18N.t('kpi.paybackSub') : I18N.t('kpi.paybackSubRent')));
 
     $('unit-econ').innerHTML = `
       <table>
@@ -742,8 +762,16 @@ const App = (() => {
   // ---------- 标签页 ----------
 
   function switchTab(name) {
-    document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    document.querySelectorAll('.tab').forEach(b => {
+      const active = b.dataset.tab === name;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      const active = p.id === 'panel-' + name;
+      p.classList.toggle('active', active);
+      p.setAttribute('aria-hidden', String(!active));
+    });
     setTimeout(() => Charts.resizeAll(), 80);
   }
 
@@ -841,6 +869,13 @@ const App = (() => {
     $('btn-copy').addEventListener('click', copySummary);
     $('btn-save-snapshot').addEventListener('click', saveSnapshot);
     $('btn-clear-snapshot').addEventListener('click', clearSnapshot);
+    $('btn-expand-all').addEventListener('click', () => {
+      document.querySelectorAll('#panel-setup details').forEach(d => d.setAttribute('open', ''));
+    });
+    $('btn-collapse-all').addEventListener('click', () => {
+      document.querySelectorAll('#panel-setup details').forEach(d => d.removeAttribute('open'));
+    });
+    $('mobile-cta-btn').addEventListener('click', () => switchTab('profit'));
 
     resetBtn = document.createElement('button');
     resetBtn.className = 'btn ghost small';
