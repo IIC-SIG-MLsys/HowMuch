@@ -7,7 +7,7 @@ const { JSDOM } = require('jsdom');
 const htmlPath = path.join(__dirname, '..', 'index.html');
 let html = fs.readFileSync(htmlPath, 'utf8');
 // 冒烟测试去掉 ECharts（jsdom 无 canvas），验证应用逻辑本身
-html = html.replace('<script src="vendor/echarts.min.js"></script>', '');
+html = html.replace(/<script src="vendor\/echarts\.min\.js[^"]*"><\/script>/, '');
 
 const errors = [];
 const dom = new JSDOM(html, {
@@ -69,9 +69,10 @@ window.addEventListener('load', () => {
       input('gpu-rent', 4);
       ok(parseFloat(d.getElementById('gpu-rent').value) === 4, 'rent input applied');
 
-      change('currency-select', 'CNY');
+      d.getElementById('currency-btn').click();
       ok(Math.abs(parseFloat(d.getElementById('gpu-rent').value) - 4 * 7.2) < 0.01, 'currency switch converts money (rent)');
       ok(Math.abs(parseFloat(d.getElementById('biz-contract').value) - 25000 * 7.2) < 1, 'currency switch converts money (contract)');
+      ok(d.getElementById('currency-btn').textContent === '¥ CNY', 'currency button label updates');
 
       change('model-key', 'v4-pro-fp4');
       ok(d.getElementById('model-total-params').value === '1600', 'model preset applies params');

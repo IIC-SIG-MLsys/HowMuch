@@ -185,7 +185,7 @@ const App = (() => {
   // ---------- 表单 ----------
 
   function populateForm() {
-    $('currency-select').value = state.currency;
+    updateCurrencyBtn();
     $('model-key').value = state.modelKey;
     $('gpu-key').value = state.gpuKey;
     $('biz-mode').value = state.biz.mode;
@@ -201,6 +201,11 @@ const App = (() => {
     updateMoneyLabels();
     updateScenarioChips();
     updateModeDesc();
+  }
+
+  function updateCurrencyBtn() {
+    const btn = $('currency-btn');
+    if (btn) btn.textContent = state.currency === 'CNY' ? '¥ CNY' : '$ USD';
   }
 
   function collectForm() {
@@ -761,9 +766,6 @@ const App = (() => {
     renderSources();
     initTabs();
 
-    document.querySelectorAll('[data-lang]').forEach(btn => {
-      btn.addEventListener('click', () => I18N.setLang(btn.dataset.lang));
-    });
     document.addEventListener('i18n:changed', () => {
       populateForm();
       renderAll();
@@ -771,15 +773,12 @@ const App = (() => {
       if (resetBtn) resetBtn.textContent = I18N.t('btn.reset');
     });
 
-    $('currency-select').addEventListener('change', e => {
-      const from = state.currency;
-      const to = e.target.value;
-      if (from !== to) {
-        collectForm();
-        convertMoney(state, from, to);
-        populateForm();
-        renderAll();
-      }
+    $('currency-btn').addEventListener('click', () => {
+      const to = state.currency === 'USD' ? 'CNY' : 'USD';
+      collectForm();
+      convertMoney(state, state.currency, to);
+      populateForm();
+      renderAll();
     });
 
     $('model-key').addEventListener('change', e => {
@@ -812,11 +811,14 @@ const App = (() => {
       el.addEventListener('change', renderAll);
     });
 
-    document.querySelectorAll('[data-scenario]').forEach(btn => {
-      btn.addEventListener('click', () => applyScenario(btn.dataset.scenario));
-    });
-    document.querySelectorAll('[data-reliability]').forEach(btn => {
-      btn.addEventListener('click', () => applyReliability(btn.dataset.reliability));
+    // 事件委托：语言、场景、情景按钮（防止任何重绘覆盖导致点击失效）
+    document.addEventListener('click', e => {
+      const langBtn = e.target.closest('[data-lang]');
+      if (langBtn) { I18N.setLang(langBtn.dataset.lang); return; }
+      const scenarioBtn = e.target.closest('[data-scenario]');
+      if (scenarioBtn) { applyScenario(scenarioBtn.dataset.scenario); return; }
+      const relBtn = e.target.closest('[data-reliability]');
+      if (relBtn) { applyReliability(relBtn.dataset.reliability); return; }
     });
 
     $('btn-export').addEventListener('click', exportConfig);
