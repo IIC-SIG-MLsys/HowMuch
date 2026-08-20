@@ -7,7 +7,7 @@
   <meta property="og:title" content="AI 部署成本计算器 · HowMuch">
   <meta property="og:description" content="交互式估算 GPU 集群部署 DeepSeek V4 等大模型的吞吐、成本与盈利空间，支持 DSpark / KV 缓存池 / PD 分离等优化。">
   <title>AI 部署成本计算器 · HowMuch</title>
-  <link rel="stylesheet" href="css/style.css?v=20260820g">
+  <link rel="stylesheet" href="css/style.css?v=20260820h">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
@@ -140,6 +140,23 @@
               <label class="field check"><input type="checkbox" id="opt-pd"> <span data-i18n="field.pd">启用 PD 分离（Mooncake 式）</span></label>
               <label class="field"><span data-i18n="field.pdGain">PD 分离解码增益（%）</span><input type="number" id="opt-pd-gain" min="0" max="100" step="1"></label>
               <label class="field"><span data-i18n="field.reserve">显存预留（GB/节点）</span><input type="number" id="opt-reserve" min="0" step="1"></label>
+              <p class="field-note full" data-i18n="note.engineering">经典工程优化：内核优化与连续批处理提高解码吞吐；Chunked Prefill 提高预填充效率；KV 精度降低显存与 KV 读取（注意质量权衡）；MoE 通信优化对多节点更明显。</p>
+              <label class="field check"><input type="checkbox" id="opt-kernel"> <span data-i18n="field.kernel">算子/内核优化（FlashAttention / CUDA Graph）</span></label>
+              <label class="field"><span data-i18n="field.kernelGain">内核优化解码增益（%）</span><input type="number" id="opt-kernel-gain" min="0" max="50" step="1"></label>
+              <label class="field check"><input type="checkbox" id="opt-chunked"> <span data-i18n="field.chunked">启用 Chunked Prefill（分块预填充）</span></label>
+              <label class="field"><span data-i18n="field.chunkedGain">Chunked Prefill 预填充增益（%）</span><input type="number" id="opt-chunked-gain" min="0" max="100" step="1"></label>
+              <label class="field">
+                <span data-i18n="field.kvPrecision">KV 缓存精度</span>
+                <select id="opt-kvprecision">
+                  <option value="fp16" data-i18n="kvPrecision.fp16">FP16（×2 显存）</option>
+                  <option value="fp8" data-i18n="kvPrecision.fp8">FP8（默认）</option>
+                  <option value="fp4" data-i18n="kvPrecision.fp4">FP4（−50% 显存）</option>
+                  <option value="3bit" data-i18n="kvPrecision.3bit">3-bit（−62.5% 显存）</option>
+                </select>
+              </label>
+              <label class="field"><span data-i18n="field.batching">连续批处理效率因子（×）</span><input type="number" id="opt-batching" min="0.7" max="1.3" step="0.05"></label>
+              <label class="field check"><input type="checkbox" id="opt-moe"> <span data-i18n="field.moe">MoE 专家/通信优化</span></label>
+              <label class="field"><span data-i18n="field.moeGain">MoE 通信增益（%）</span><input type="number" id="opt-moe-gain" min="0" max="50" step="1"></label>
               <p class="field-note full" data-i18n="note.dspark">DSpark 官方实测：单用户提速 60–85%，严格延迟约束下吞吐最高 +661%。默认取 1.6× 作为生产保守值。</p>
             </div>
           </details>
@@ -320,11 +337,11 @@
     <button id="mobile-cta-btn" class="btn small" data-i18n="btn.gotoProfit">查看收益 →</button>
   </div>
 
-  <script src="vendor/echarts.min.js?v=20260820g"></script>
-  <script src="js/i18n.js?v=20260820g"></script>
-  <script src="js/data.js?v=20260820g"></script>
-  <script src="js/engine.js?v=20260820g"></script>
-  <script src="js/charts.js?v=20260820g"></script>
-  <script src="js/app.js?v=20260820g"></script>
+  <script src="vendor/echarts.min.js?v=20260820h"></script>
+  <script src="js/i18n.js?v=20260820h"></script>
+  <script src="js/data.js?v=20260820h"></script>
+  <script src="js/engine.js?v=20260820h"></script>
+  <script src="js/charts.js?v=20260820h"></script>
+  <script src="js/app.js?v=20260820h"></script>
 </body>
 </html>

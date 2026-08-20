@@ -103,6 +103,11 @@ window.addEventListener('load', () => {
       ok(!!d.getElementById('cost-residual'), 'residual rate input exists');
       ok(!!d.getElementById('btn-copy'), 'copy summary button exists');
       ok(!!d.getElementById('btn-more'), 'mobile more button exists');
+      ok(!!d.getElementById('opt-kernel'), 'kernel optimization toggle exists');
+      ok(!!d.getElementById('opt-chunked'), 'chunked prefill toggle exists');
+      ok(!!d.getElementById('opt-kvprecision'), 'KV precision select exists');
+      ok(!!d.getElementById('opt-batching'), 'batching factor input exists');
+      ok(!!d.getElementById('opt-moe'), 'MoE optimization toggle exists');
       ok(!!d.getElementById('btn-expand-all'), 'expand-all button exists');
       ok(!!d.getElementById('btn-collapse-all'), 'collapse-all button exists');
       ok(!!d.getElementById('mobile-cta'), 'mobile CTA exists');
@@ -130,6 +135,8 @@ window.addEventListener('load', () => {
       d.querySelector('[data-reliability="optimistic"]').click();
       ok(parseFloat(d.getElementById('opt-bwutil').value) === 60, 'optimistic scenario sets BW util 60%');
       ok(Math.abs(parseFloat(d.getElementById('opt-dspark-speedup').value) - 1.85) < 1e-6, 'optimistic scenario sets DSpark 1.85');
+      ok(d.getElementById('opt-kvprecision').value === '3bit', 'optimistic scenario sets 3-bit KV');
+      ok(Math.abs(parseFloat(d.getElementById('opt-batching').value) - 1.1) < 1e-6, 'optimistic scenario sets batching 1.1');
 
       ok(d.getElementById('biz-mode-desc').textContent.length > 10, 'mode description rendered');
 

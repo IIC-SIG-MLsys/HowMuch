@@ -33,7 +33,12 @@ const ASSUMPTIONS = [
   { key: 'assumption.singleStream', src: 'src.estimate', values: s => ({ low: Math.round(s.opt.singleStreamTps * 0.8), typical: s.opt.singleStreamTps, high: Math.round(s.opt.singleStreamTps * 1.2) }) },
   { key: 'assumption.prefillEff', src: 'src.estimate', values: s => ({ low: '—', typical: s.opt.prefillEffPct + '%', high: '—' }) },
   { key: 'assumption.rent', src: 'src.market', values: s => ({ low: '—', typical: s.gpu.rentPerHour + '/GPU/h', high: '—' }) },
-  { key: 'assumption.kvBytes', src: 'src.official', values: s => ({ low: s.model.kvBytesPerToken, typical: s.model.kvBytesPerToken, high: s.modelKey === 'v4-pro' || s.modelKey === 'v4-pro-fp4' ? I18N.t('assumption.kvBytesHigh') : '—' }) }
+  { key: 'assumption.kvBytes', src: 'src.official', values: s => ({ low: s.model.kvBytesPerToken, typical: s.model.kvBytesPerToken, high: s.modelKey === 'v4-pro' || s.modelKey === 'v4-pro-fp4' ? I18N.t('assumption.kvBytesHigh') : '—' }) },
+  { key: 'assumption.kernel', src: 'src.estimate', values: s => ({ low: '5%', typical: s.opt.kernelOptOn ? s.opt.kernelGainPct + '%' : 'off', high: '15%' }) },
+  { key: 'assumption.chunked', src: 'src.community', values: s => ({ low: '10%', typical: s.opt.chunkedPrefillOn ? s.opt.chunkedGainPct + '%' : 'off', high: '30%' }) },
+  { key: 'assumption.kvPrecision', src: 'src.community', values: s => ({ low: 'FP8', typical: s.opt.kvPrecision, high: '3-bit' }) },
+  { key: 'assumption.batching', src: 'src.community', values: s => ({ low: '0.85', typical: String(s.opt.batchingFactor), high: '1.15' }) },
+  { key: 'assumption.moe', src: 'src.estimate', values: s => ({ low: '0%', typical: s.opt.moeOptOn ? s.opt.moeGainPct + '%' : 'off', high: '10%' }) }
 ];
 
 const App = (() => {
@@ -67,6 +72,10 @@ const App = (() => {
     ['opt-bwutil', s => s.opt.bwUtilPct, (s, v) => s.opt.bwUtilPct = v, 1, 99],
     ['opt-prefill-eff', s => s.opt.prefillEffPct, (s, v) => s.opt.prefillEffPct = v, 1, 100],
     ['opt-pd-gain', s => s.opt.pdSplitGainPct, (s, v) => s.opt.pdSplitGainPct = v, 0, 100],
+    ['opt-kernel-gain', s => s.opt.kernelGainPct, (s, v) => s.opt.kernelGainPct = v, 0, 50],
+    ['opt-chunked-gain', s => s.opt.chunkedGainPct, (s, v) => s.opt.chunkedGainPct = v, 0, 100],
+    ['opt-batching', s => s.opt.batchingFactor, (s, v) => s.opt.batchingFactor = v, 0.7, 1.3],
+    ['opt-moe-gain', s => s.opt.moeGainPct, (s, v) => s.opt.moeGainPct = v, 0, 50],
     ['opt-reserve', s => s.opt.reserveGB, (s, v) => s.opt.reserveGB = v, 0, 1e6],
     ['biz-util', s => s.biz.utilizationPct, (s, v) => s.biz.utilizationPct = v, 0, 100],
     ['biz-peak-share', s => s.biz.peakSharePct, (s, v) => s.biz.peakSharePct = v, 0, 100],
@@ -195,6 +204,10 @@ const App = (() => {
     $('opt-kvpool').checked = state.opt.kvPoolOn;
     $('opt-offload').checked = state.opt.offloadOn;
     $('opt-pd').checked = state.opt.pdSplitOn;
+    $('opt-kernel').checked = state.opt.kernelOptOn;
+    $('opt-chunked').checked = state.opt.chunkedPrefillOn;
+    $('opt-kvprecision').value = state.opt.kvPrecision;
+    $('opt-moe').checked = state.opt.moeOptOn;
     for (const [id, get] of fieldMap) {
       const el = $(id);
       if (el) el.value = get(state);
@@ -218,6 +231,10 @@ const App = (() => {
     state.opt.kvPoolOn = $('opt-kvpool').checked;
     state.opt.offloadOn = $('opt-offload').checked;
     state.opt.pdSplitOn = $('opt-pd').checked;
+    state.opt.kernelOptOn = $('opt-kernel').checked;
+    state.opt.chunkedPrefillOn = $('opt-chunked').checked;
+    state.opt.kvPrecision = $('opt-kvprecision').value;
+    state.opt.moeOptOn = $('opt-moe').checked;
     for (const [id, get, set, min, max] of fieldMap) {
       const el = $(id);
       if (!el) continue;
@@ -319,14 +336,19 @@ const App = (() => {
 
   function applyReliability(level) {
     const presets = {
-      conservative: { dspark: 1.3, bwutil: 35, hit: 40 },
-      neutral: { dspark: 1.6, bwutil: 45, hit: 70 },
-      optimistic: { dspark: 1.85, bwutil: 60, hit: 90 }
+      conservative: { dspark: 1.3, bwutil: 35, hit: 40, kernel: 5, chunked: 10, kv: 'fp8', batching: 1.0, moe: 2 },
+      neutral: { dspark: 1.6, bwutil: 45, hit: 70, kernel: 10, chunked: 20, kv: 'fp8', batching: 1.0, moe: 5 },
+      optimistic: { dspark: 1.85, bwutil: 60, hit: 90, kernel: 15, chunked: 30, kv: '3bit', batching: 1.1, moe: 8 }
     }[level];
     if (!presets) return;
     state.opt.dsparkSpeedup = presets.dspark;
     state.opt.bwUtilPct = presets.bwutil;
     state.opt.cacheHitPct = presets.hit;
+    state.opt.kernelGainPct = presets.kernel;
+    state.opt.chunkedGainPct = presets.chunked;
+    state.opt.kvPrecision = presets.kv;
+    state.opt.batchingFactor = presets.batching;
+    state.opt.moeGainPct = presets.moe;
     document.querySelectorAll('[data-reliability]').forEach(b => b.classList.toggle('active', b.dataset.reliability === level));
     populateForm();
     renderAll();

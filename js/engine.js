@@ -5,6 +5,13 @@
 // 依赖：data.js 提供的预设、defaultState、deepClone、apply*Preset 等
 // ---------------------------------------------------------------------------
 
+const KV_PRECISION = {
+  fp16: 2.0,
+  fp8: 1.0,
+  fp4: 0.5,
+  '3bit': 0.375
+};
+
 function clamp(v, min, max) {
   const n = Number(v);
   if (!isFinite(n)) return min;
@@ -41,6 +48,11 @@ function normalizeState(state) {
   s.opt.bwUtilPct = clamp(s.opt.bwUtilPct, 1, 99);
   s.opt.prefillEffPct = clamp(s.opt.prefillEffPct, 1, 100);
   s.opt.pdSplitGainPct = clamp(s.opt.pdSplitGainPct, 0, 100);
+  s.opt.kernelGainPct = clamp(s.opt.kernelGainPct, 0, 50);
+  s.opt.chunkedGainPct = clamp(s.opt.chunkedGainPct, 0, 100);
+  s.opt.batchingFactor = clamp(s.opt.batchingFactor, 0.7, 1.3);
+  s.opt.moeGainPct = clamp(s.opt.moeGainPct, 0, 50);
+  if (!KV_PRECISION[s.opt.kvPrecision]) s.opt.kvPrecision = 'fp8';
   s.opt.singleStreamTps = clamp(s.opt.singleStreamTps, 1, 1e6);
   s.opt.reserveGB = clamp(s.opt.reserveGB, 0, 1e6);
 
@@ -89,18 +101,25 @@ function computeModel(m) {
 function computeNode(state) {
   const g = state.gpu, m = state.model, o = state.opt;
   const mm = computeModel(m);
-  const bytesPerTok = mm.activeBytes + mm.kvBytesPerReq;
+  const kvFactor = KV_PRECISION[o.kvPrecision] || 1;
+  const kvBytesPerReq = mm.kvBytesPerReq * kvFactor;
+  const bytesPerTok = mm.activeBytes + kvBytesPerReq;
   const basePerGpu = (g.bandwidthTBps * 1e12) / bytesPerTok;
   const effPerGpu = basePerGpu * o.bwUtilPct / 100;
   const dsparkPerGpu = effPerGpu * (o.dsparkOn ? o.dsparkSpeedup : 1);
+  const engFactor = (o.kernelOptOn ? (1 + o.kernelGainPct / 100) : 1) *
+    o.batchingFactor *
+    (o.moeOptOn ? (1 + o.moeGainPct / 100) : 1);
   const pdFactor = o.pdSplitOn ? (1 + o.pdSplitGainPct / 100) : 1;
-  const nodeDecode = dsparkPerGpu * state.gpusPerNode * pdFactor;
-  const nodeDecodeNoDspark = effPerGpu * state.gpusPerNode * pdFactor;
+  const nodeDecode = dsparkPerGpu * state.gpusPerNode * pdFactor * engFactor;
+  const nodeDecodeNoDspark = effPerGpu * state.gpusPerNode * pdFactor * engFactor;
 
   const flopsPerTok = 2 * m.activeParamsB * 1e9;
-  const nodePrefill = g.fp8TFLOPS * 1e12 / flopsPerTok * state.gpusPerNode * o.prefillEffPct / 100;
+  const prefillFactor = (o.chunkedPrefillOn ? (1 + o.chunkedGainPct / 100) : 1) *
+    (o.kernelOptOn ? (1 + o.kernelGainPct / 100) : 1);
+  const nodePrefill = g.fp8TFLOPS * 1e12 / flopsPerTok * state.gpusPerNode * o.prefillEffPct / 100 * prefillFactor;
 
-  const nodeTheoretical = (g.bandwidthTBps * 1e12) / bytesPerTok * state.gpusPerNode * pdFactor;
+  const nodeTheoretical = (g.bandwidthTBps * 1e12) / bytesPerTok * state.gpusPerNode * pdFactor * engFactor;
   const requiredConcurrency = Math.max(1, Math.ceil(
     nodeTheoretical * o.bwUtilPct / 100 / o.singleStreamTps
   ));
@@ -112,6 +131,12 @@ function computeNode(state) {
 
   return {
     ...mm,
+    kvBytesPerReq,
+    kvMBPerReq: kvBytesPerReq / 1e6,
+    kvGBPerReq: kvBytesPerReq / 1e9,
+    kvFactor,
+    engFactor,
+    prefillFactor,
     basePerGpu,
     effPerGpu,
     dsparkPerGpu,

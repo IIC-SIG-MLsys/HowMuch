@@ -17,12 +17,12 @@ data.applyModelPreset(stFp4, 'v4-flash-fp4');
 assert.ok(Math.abs(engine.computeModel(stFp4.model).weightGB - 284 * 0.5 * 1.03) < 1e-9,
   'fp4 weight wrong: ' + engine.computeModel(stFp4.model).weightGB);
 
-// 3) H200 单节点解码吞吐（带宽 TB/s × 1e12）
+// 3) H200 单节点解码吞吐（带宽 TB/s × 1e12，含默认工程优化因子 1.1×1.05=1.155）
 const n = engine.computeNode(st);
 const expectBase = 4.8e12 / (13e9 + 584 * 4512);
 assert.ok(Math.abs(n.basePerGpu - expectBase) < 1e-6, 'basePerGpu wrong: ' + n.basePerGpu);
-assert.ok(Math.abs(n.nodeDecodeNoDspark - expectBase * 0.45 * 8) < 1e-3, 'decodeNoDspark wrong');
-assert.ok(Math.abs(n.nodeDecode - expectBase * 0.45 * 8 * 1.6) < 1e-3, 'decode wrong');
+assert.ok(Math.abs(n.nodeDecodeNoDspark - expectBase * 0.45 * 8 * 1.155) < 1e-3, 'decodeNoDspark wrong');
+assert.ok(Math.abs(n.nodeDecode - expectBase * 0.45 * 8 * 1.6 * 1.155) < 1e-3, 'decode wrong');
 assert.ok(n.requiredConcurrency >= 1, 'requiredConcurrency invalid');
 assert.ok(n.fits, 'H200 should fit V4-Flash');
 
@@ -33,6 +33,13 @@ const nH100 = engine.computeNode(stH100);
 const nB300 = engine.computeNode(stB300);
 assert.ok(nH100.nodeDecode < n.nodeDecode && n.nodeDecode < nB300.nodeDecode,
   `order wrong: ${nH100.nodeDecode} / ${n.nodeDecode} / ${nB300.nodeDecode}`);
+
+// 4b) KV 精度 3-bit 降低 KV 显存并提高解码吞吐
+const st3 = data.deepClone(st);
+st3.opt.kvPrecision = '3bit';
+const n3 = engine.computeNode(st3);
+assert.ok(Math.abs(n3.kvMBPerReq - n.kvMBPerReq * 0.375) < 1e-6, '3bit kvMB wrong');
+assert.ok(n3.nodeDecode > n.nodeDecode, '3bit KV should raise decode');
 
 // 5) 收益结果完整
 const r = engine.calcResults(st);
